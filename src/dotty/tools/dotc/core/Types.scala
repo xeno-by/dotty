@@ -274,7 +274,7 @@ object Types {
      *  in linearization order, with the class itself as first element.
      *  Inherited by all type proxies. `Nil` for all other types.
      */
-    final def baseClasses(implicit ctx: Context): List[ClassSymbol] = track("baseClasses") {
+    final def baseClasses(implicit ctx: Context): List[ClassSymbol] = /*>|> track("baseClasses") <|<*/ {
       this match {
         case tp: TypeProxy =>
           tp.underlying.baseClasses
@@ -303,12 +303,12 @@ object Types {
      *  The result is either a SymDenotation or a MultiDenotation of SymDenotations.
      *  The info(s) are the original symbol infos, no translation takes place.
      */
-    final def decl(name: Name)(implicit ctx: Context): Denotation = track("decl") {
+    final def decl(name: Name)(implicit ctx: Context): Denotation = /*>|> track("decl") <|<*/ {
       findDecl(name, EmptyFlags)
     }
 
     /** A denotation containing the non-private declaration(s) in this type with the given name */
-    final def nonPrivateDecl(name: Name)(implicit ctx: Context): Denotation = track("nonPrivateDecl") {
+    final def nonPrivateDecl(name: Name)(implicit ctx: Context): Denotation = /*>|> track("nonPrivateDecl") <|<*/ {
       findDecl(name, Private)
     }
 
@@ -328,12 +328,12 @@ object Types {
     }
 
     /** The member of this type with the given name  */
-    final def member(name: Name)(implicit ctx: Context): Denotation = /*>|>*/ track("member") /*<|<*/ {
+    final def member(name: Name)(implicit ctx: Context): Denotation = /*>|> track("member") <|<*/ {
       findMember(name, widenIfUnstable, EmptyFlags)
     }
 
     /** The non-private member of this type with the given name. */
-    final def nonPrivateMember(name: Name)(implicit ctx: Context): Denotation = track("nonPrivateMember") {
+    final def nonPrivateMember(name: Name)(implicit ctx: Context): Denotation = /*>|> track("nonPrivateMember") <|<*/ {
       findMember(name, widenIfUnstable, Flags.Private)
     }
 
@@ -426,25 +426,25 @@ object Types {
     }
 
     /** The set of abstract term members of this type. */
-    final def abstractTermMembers(implicit ctx: Context): Seq[SingleDenotation] = track("abstractTermMembers") {
+    final def abstractTermMembers(implicit ctx: Context): Seq[SingleDenotation] = /*>|> track("abstractTermMembers") <|<*/ {
       memberDenots(abstractTermNameFilter,
           (name, buf) => buf ++= member(name).altsWith(_ is Deferred))
     }
 
     /** The set of abstract type members of this type. */
-    final def abstractTypeMembers(implicit ctx: Context): Seq[SingleDenotation] = track("abstractTypeMembers") {
+    final def abstractTypeMembers(implicit ctx: Context): Seq[SingleDenotation] = /*>|> track("abstractTypeMembers") <|<*/ {
       memberDenots(abstractTypeNameFilter,
           (name, buf) => buf += member(name).asSingleDenotation)
     }
 
     /** The set of type members of this type */
-    final def typeMembers(implicit ctx: Context): Seq[SingleDenotation] = track("typeMembers") {
+    final def typeMembers(implicit ctx: Context): Seq[SingleDenotation] = /*>|> track("typeMembers") <|<*/ {
       memberDenots(typeNameFilter,
           (name, buf) => buf += member(name).asSingleDenotation)
     }
 
     /** The set of implicit members of this type */
-    final def implicitMembers(implicit ctx: Context): List[TermRef] = track("implicitMembers") {
+    final def implicitMembers(implicit ctx: Context): List[TermRef] = /*>|> track("implicitMembers") <|<*/ {
       memberDenots(implicitFilter,
           (name, buf) => buf ++= member(name).altsWith(_ is Implicit))
         .toList.map(_.termRefWithSig)
@@ -457,7 +457,7 @@ object Types {
     /** This type seen as if it were the type of a member of prefix type `pre`
      *  declared in class `cls`.
      */
-    final def asSeenFrom(pre: Type, cls: Symbol)(implicit ctx: Context): Type = track("asSeenFrom") {
+    final def asSeenFrom(pre: Type, cls: Symbol)(implicit ctx: Context): Type = /*>|> track("asSeenFrom") <|<*/ {
       if (!cls.membersNeedAsSeenFrom(pre)) this
       else ctx.asSeenFrom(this, pre, cls, null)
     }
@@ -465,14 +465,14 @@ object Types {
 // ----- Subtype-related --------------------------------------------
 
     /** Is this type a subtype of that type? */
-    final def <:<(that: Type)(implicit ctx: Context): Boolean = track("<:<") {
+    final def <:<(that: Type)(implicit ctx: Context): Boolean = /*>|> track("<:<") <|<*/ {
       ctx.typeComparer.topLevelSubType(this, that)
     }
 
     /** Is this type the same as that type?
      *  This is the case iff `this <:< that` and `that <:< this`.
      */
-    final def =:=(that: Type)(implicit ctx: Context): Boolean = track("=:=") {
+    final def =:=(that: Type)(implicit ctx: Context): Boolean = /*>|> track("=:=") <|<*/ {
       ctx.typeComparer.isSameType(this, that)
     }
 
@@ -490,24 +490,24 @@ object Types {
      */
     def matches(that: Type)(implicit ctx: Context): Boolean =
       if (Config.newMatch) this.signature matches that.signature
-      else track("matches") {
+      else /*>|> track("matches") <|<*/ {
         ctx.typeComparer.matchesType(
           this, that, alwaysMatchSimple = !ctx.phase.erasedTypes)
       }
 
     /** The basetype of this type with given class symbol */
-    final def baseType(base: Symbol)(implicit ctx: Context): Type = /*ctx.traceIndented(s"$this baseType $base")*/ /*>|>*/ track("baseType") /*<|<*/ {
+    final def baseType(base: Symbol)(implicit ctx: Context): Type = /*ctx.traceIndented(s"$this baseType $base")*/ /*>|> track("baseType") <|<*/ {
       base.denot match {
         case classd: ClassDenotation => classd.baseTypeOf(this)//widen.dealias)
         case _ => NoType
       }
     }
 
-    def & (that: Type)(implicit ctx: Context): Type = track("&") {
+    def & (that: Type)(implicit ctx: Context): Type = /*>|> track("&") <|<*/ {
       ctx.typeComparer.glb(this, that)
     }
 
-    def | (that: Type)(implicit ctx: Context): Type = track("|") {
+    def | (that: Type)(implicit ctx: Context): Type = /*>|> track("|") <|<*/ {
       ctx.typeComparer.lub(this, that)
     }
 

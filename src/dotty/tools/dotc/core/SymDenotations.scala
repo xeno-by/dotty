@@ -1029,7 +1029,7 @@ object SymDenotations {
       } else computeNPMembersNamed(name, inherited)
     }
 
-    private[core] def computeNPMembersNamed(name: Name, inherited: Boolean)(implicit ctx: Context): PreDenotation = /*>|>*/ Stats.track("computeNPMembersNamed") /*<|<*/ {
+    private[core] def computeNPMembersNamed(name: Name, inherited: Boolean)(implicit ctx: Context): PreDenotation = /*>|> Stats.track("computeNPMembersNamed") <|<*/ {
       if (!inherited ||
           !Config.useFingerPrints ||
           (memberFingerPrint contains name)) {
@@ -1100,7 +1100,7 @@ object SymDenotations {
         }
       }
 
-      /*>|>*/ ctx.debugTraceIndented(s"$tp.baseType($this)") /*<|<*/ {
+      /*>|> ctx.debugTraceIndented(s"$tp.baseType($this)") <|<*/ {
         tp match {
           case tp: CachedType =>
             checkBasesUpToDate()

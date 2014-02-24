@@ -201,7 +201,7 @@ class TypeComparer(initctx: Context) extends DotClass {
   def isNonBottomSubType(tp1: Type, tp2: Type): Boolean =
     !(tp2 isRef NothingClass) && isSubType(tp1, tp2)
 
-  def isSubType(tp1: Type, tp2: Type): Boolean = /*>|>*/ ctx.traceIndented(s"isSubType ${tp1.show} <:< ${tp2.show}", subtyping) /*<|<*/ {
+  def isSubType(tp1: Type, tp2: Type): Boolean = /*>|> ctx.traceIndented(s"isSubType ${tp1.show} <:< ${tp2.show}", subtyping) <|<*/ {
     if (tp2 eq NoType) false
     else if (tp1 eq tp2) true
     else {
@@ -439,7 +439,7 @@ class TypeComparer(initctx: Context) extends DotClass {
             case mbr: SingleDenotation => qualifies(mbr)
             case _ => mbr hasAltWith qualifies
           }
-          def hasMatchingMember(name: Name): Boolean = /*>|>*/ ctx.traceIndented(s"hasMatchingMember($name) ${tp1.member(name)}", subtyping) /*<|<*/ (
+          def hasMatchingMember(name: Name): Boolean = /*>|> ctx.traceIndented(s"hasMatchingMember($name) ${tp1.member(name)}", subtyping) <|<*/ (
                memberMatches(tp1 member name)
             ||
                { // special case for situations like:
@@ -838,7 +838,7 @@ class TypeComparer(initctx: Context) extends DotClass {
    *  Such TypeBounds can also be arbitrarily instantiated. In both cases we need to
    *  make sure that such types do not actually arise in source programs.
    */
-  final def andType(tp1: Type, tp2: Type) = ctx.traceIndented(s"glb(${tp1.show}, ${tp2.show})", subtyping, show = true) {
+  final def andType(tp1: Type, tp2: Type) = /*>|> ctx.traceIndented(s"glb(${tp1.show}, ${tp2.show})", subtyping, show = true) <|<*/ {
     val t1 = distributeAnd(tp1, tp2)
     if (t1.exists) t1
     else {
