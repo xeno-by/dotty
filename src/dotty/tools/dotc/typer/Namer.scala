@@ -619,7 +619,7 @@ class Namer { typer: Typer =>
 
     rhsType match {
       case bounds: TypeBounds =>
-        if (tparamSyms.nonEmpty) bounds.higherKinded(tparamSyms)
+        if (tparamSyms.nonEmpty) bounds.higherKindedBounds(tparamSyms)
         else rhsType
       case _ =>
         val abstractedRhsType =

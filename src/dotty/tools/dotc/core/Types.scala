@@ -364,12 +364,15 @@ object Types {
           NoDenotation
       }
       def goRefined(tp: RefinedType) = {
-        val pdenot = go(tp.parent)
         val rinfo = tp.refinedInfo.substThis(tp, pre)
-        if (name.isTypeName) // simplified case that runs more efficiently
-          pdenot.asSingleDenotation.derivedSingleDenotation(pdenot.symbol, rinfo)
-        else
-          pdenot & (new JointRefDenotation(NoSymbol, rinfo, Period.allInRun(ctx.runId)), pre)
+        if (name.isHkParamName) new JointRefDenotation(NoSymbol, rinfo, ctx.stablePeriod)
+        else {
+          val pdenot = go(tp.parent)
+          if (name.isTypeName) // simplified case that runs more efficiently
+            pdenot.asSingleDenotation.derivedSingleDenotation(pdenot.symbol, rinfo)
+          else
+            pdenot & (new JointRefDenotation(NoSymbol, rinfo, Period.allInRun(ctx.runId)), pre)
+        }
       }
       def goThis(tp: ThisType) = {
         val d = go(tp.underlying)
@@ -1901,47 +1904,6 @@ object Types {
 
     /** If this type and that type have the same variance, this variance, otherwise 0 */
     final def commonVariance(that: TypeBounds): Int = (this.variance + that.variance) / 2
-
-    /** Given a the typebounds L..H of higher-kinded abstract type
-     *
-     *    type T[boundSyms] >: L <: H
-     *
-     *  produce its equivalent bounds L'..R that make no reference to the bound
-     *  symbols on the left hand side. The idea is to rewrite the declaration to
-     *
-     *      type T >: L' <: HigherKindedXYZ { type _$hk$i >: bL_i <: bH_i } & H'
-     *
-     *  where
-     *
-     *  - XYZ encodes the variants of the bound symbols using `P` (positive variance)
-     *    `N` (negative variance), `I` (invariant).
-     *  - bL_i is the lower bound of bound symbol #i under substitution `substBoundSyms`
-     *  - bH_i is the upper bound of bound symbol #i under substitution `substBoundSyms`
-     *  - `substBoundSyms` is the substitution that maps every bound symbol #i to the
-     *    reference `<this>._$hk$i`, where `<this>` is the RefinedThis referring to the
-     *    previous HigherKindedXYZ refined type.
-     *  - L' = substBoundSyms(L), H' = substBoundSyms(H)
-     *
-     *  Example:
-     *
-     *      type T[X <: F[X]] <: Traversable[X, T]
-     *
-     *  is rewritten to:
-     *
-     *      type T <: HigherKindedP { type _$hk$0 <: F[$_hk$0] } & Traversable[<this>._$hk$0, T]
-     *
-     *  @see Definitions.hkTrait
-     */
-    def higherKinded(boundSyms: List[Symbol])(implicit ctx: Context): TypeBounds = {
-      val parent = defn.hkTrait(boundSyms map (_.variance)).typeRef
-      val hkParamNames = boundSyms.indices.toList map tpnme.higherKindedParamName
-      def substBoundSyms(tp: Type)(rt: RefinedType): Type =
-        tp.subst(boundSyms, hkParamNames map (TypeRef(RefinedThis(rt), _)))
-      val hkParamInfoFns: List[RefinedType => Type] =
-        for (bsym <- boundSyms) yield substBoundSyms(bsym.info) _
-      val hkBound = RefinedType.make(parent, hkParamNames, hkParamInfoFns).asInstanceOf[RefinedType]
-      TypeBounds(substBoundSyms(lo)(hkBound), AndType(hkBound, substBoundSyms(hi)(hkBound)))
-    }
 
     override def toString =
       if (lo eq hi) s"TypeAlias($lo)" else s"TypeBounds($lo, $hi)"

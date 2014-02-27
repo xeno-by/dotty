@@ -8,6 +8,8 @@ import Decorators._
 import util.Stats._
 import util.common._
 import Names._
+import StdNames._
+import NameOps._
 import Flags._
 import util.Positions.Position
 import collection.mutable
@@ -31,32 +33,28 @@ class TypeApplications(val self: Type) extends AnyVal {
       case tp: ClassInfo =>
         tp.cls.typeParams
       case tp: TypeRef =>
+        println(s"tparams of $tp")
         val tsym = tp.typeSymbol
         if (tsym.isClass) tsym.typeParams
         else if (tsym.info.isAlias) tp.underlying.typeParams
-        else tp.info.bounds.hi match {
-          case AndType(hkBound, other) if defn.hkTraits contains hkBound.typeSymbol =>
-            hkBound.typeSymbol.typeParams
-          case _ =>
-            Nil
-        }
+        else Nil
       case tp: RefinedType =>
         tp.parent.typeParams filterNot (_.name == tp.refinedName)
       case tp: TypeProxy =>
         tp.underlying.typeParams
-      case tp: AndType =>
+      case tp: AndType => // ??? needed
         tp.tp1.typeParams
       case _ =>
         Nil
     }
   }
+
   /** The type parameters of the underlying class.
-   *  This is like `typeParams`, except for 3 differences.
+   *  This is like `typeParams`, except for 2 differences.
    *  First, it does not adjust type parameters in refined types. I.e. type arguments
    *  do not remove corresponding type parameters.
    *  Second, it will return Nil for BoundTypes because we might get a NullPointer exception
    *  on PolyParam#underlying otherwise (demonstrated by showClass test).
-   *  Third, it won't return higher-kinded type parameters.
    */
   final def safeUnderlyingTypeParams(implicit ctx: Context): List[TypeSymbol] = {
     def ifCompleted(sym: Symbol): Symbol = if (sym.isCompleted) sym else NoSymbol
@@ -72,7 +70,7 @@ class TypeApplications(val self: Type) extends AnyVal {
         Nil
       case tp: TypeProxy =>
         tp.underlying.safeUnderlyingTypeParams
-      case tp: AndType =>
+      case tp: AndType => // ??? needed
         tp.tp1.safeUnderlyingTypeParams
       case _ =>
         Nil
@@ -85,7 +83,7 @@ class TypeApplications(val self: Type) extends AnyVal {
   /** Encode the type resulting from applying this type to given arguments */
   final def appliedTo(args: List[Type])(implicit ctx: Context): Type = /*>|>*/ track("appliedTo") /*<|<*/ {
 
-    def recur(tp: Type, tparams: List[TypeSymbol], args: List[Type]): Type = args match {
+    def classArgs(tp: Type, tparams: List[TypeSymbol], args: List[Type]): Type = args match {
       case arg :: args1 =>
         if (tparams.isEmpty) {
           println(s"applied type mismatch: $self $args, typeParams = $typeParams, tsym = ${self.typeSymbol.debugString}") // !!! DEBUG
@@ -93,23 +91,32 @@ class TypeApplications(val self: Type) extends AnyVal {
         }
         val tparam = tparams.head
         val tp1 = RefinedType(tp, tparam.name, arg.toBounds(tparam))
-        recur(tp1, tparams.tail, args1)
+        classArgs(tp1, tparams.tail, args1)
       case nil => tp
     }
-
-    def safeTypeParams(tsym: Symbol) =
-      if (tsym.isClass || !self.typeSymbol.isCompleting) typeParams
-      else {
-        ctx.warning("encountered F-bounded higher-kinded type parameters; assuming they are invariant")
-        defn.hkTrait(args map alwaysZero).typeParams
-      }
 
     if (args.isEmpty) self
     else self match {
       case tp: TypeRef =>
         val tsym = tp.symbol
-        if (tsym.isAliasType) tp.underlying.appliedTo(args)
-        else recur(tp, safeTypeParams(tsym), args)
+        if (tsym.isAliasType)
+          tp.underlying.appliedTo(args)
+        else if (tsym.isClass)
+          classArgs(tp, tsym.typeParams, args)
+        else {
+          def bound = tp.info.bounds.hi
+          ((tp: Type) /: args.zipWithIndex) { (p, argIdx) =>
+            val (arg, idx) = argIdx
+            val refinedName = tpnme.higherKindedParamName(idx)
+            val refinedVariance =
+              if (self.typeSymbol.isCompleting) {
+       			ctx.warning("encountered F-bounded higher-kinded type parameters; assuming they are invariant")
+        		0
+              }
+              else bound.member(refinedName).info.bounds.variance
+            RefinedType(p, refinedName, TypeAlias(arg, refinedVariance))
+          }
+        }
       case tp: TypeProxy =>
         tp.underlying.appliedTo(args)
       case AndType(l, r) =>
@@ -300,5 +307,71 @@ class TypeApplications(val self: Type) extends AnyVal {
       }
 
       rewrite(self)
+  }
+
+  /** Given the typebounds L..H of higher-kinded abstract type
+   *
+   *    type T[v_i X_i >: bL_i <: bH_i] >: L <: H
+   *
+   *  produce its equivalent bounds L'..R that make no reference to the bound
+   *  symbols X_i on the left hand side. The idea is to rewrite the declaration to
+   *
+   *      type T >: L <: HConstr' { type v_i _$hk$i >: bL_i <: bH_i } { HRefinements }
+   *
+   *  where
+   *
+   *  - `bL_i` is the lower bound of bound symbol #i under substitution `substBoundSyms`
+   *  - `bH_i` is the upper bound of bound symbol #i under substitution `substBoundSyms`
+   *  - `substBoundSyms` is the substitution that maps every bound symbol X_i to the
+   *    reference `<this>._$hk$i`, where `<this>` is the RefinedThis referring to the
+   *    refined type `HConstr' { type v_i _$hk$i >: bL_i <: bH_i }`.
+   *    Note: This leads to F_bounded refinements if the higher-kinded type parameter
+   *    is also F-bounded. We might need to eliminate F-boundedness by having two staged refinements,
+   *    one which intropduces the $hk_i$, the other which introduces its bounds.
+   *  - `HConstr` is the type constructor part of H without any refinements that refer to X_i.
+   *    It is required that HConstr does not refer to any higher-kinded parameter X_i.
+   *  - `HRefinements` are top-level refinements of H where the first (innermost) refinement
+   *    does refer to a higher-kinded parameter X_i.
+   *
+   *  Example:
+   *
+   *      type T[+X <: F[X]] <: Traversable[X, T]
+   *
+   *  is rewritten to:
+   *
+   *      type T <: Traversable { type +_$hk0 <: F[<this>.$_hk$0] } { type Elem = hk$0 } { type Repr = T }
+   *
+   *  where <this> refers to Traversable { type +_$hk0 <: F[<this>.$_hk$0] }.
+   */
+  def higherKindedBounds(boundSyms: List[Symbol])(implicit ctx: Context): TypeBounds = {
+    val TypeBounds(lo, hi) = self
+    val hkParamNames = boundSyms.indices.toList map tpnme.higherKindedParamName
+    def substBoundSyms(tp: Type)(rt: RefinedType): Type =
+      tp.subst(boundSyms, hkParamNames map (TypeRef(RefinedThis(rt), _)))
+    def isBoundRef(tp: Type) = tp match {
+      case tp: TypeRef => boundSyms contains tp.symbol
+      case _ => false
+    }
+    def fail(kind: String, bound: Type): Nothing =
+      throw new TypeError(s"cannot make sense of F_bounded higher-kinded $kind bound ${bound}")
+    if (lo existsPart isBoundRef) fail("lower", lo)
+    def splitRefined(tp: Type): (Type, Type => Type) =
+      if (tp existsPart isBoundRef)
+        tp match {
+          case tp: RefinedType =>
+            val (tycon, rf) = splitRefined(tp.parent)
+            (tycon, rf andThen (RefinedType(_, tp.refinedName, tp.refinedInfo)))
+          case AndType(l, r) =>
+            splitRefined(l)
+          case _ =>
+            fail("upper", hi)
+        }
+      else (tp, identity)
+
+    val (parentConstr, refinings) = splitRefined(hi)
+    val hkParamInfoFns: List[RefinedType => Type] =
+      for (bsym <- boundSyms) yield substBoundSyms(bsym.info) _
+    val hkBound = RefinedType.make(hi, hkParamNames, hkParamInfoFns).asInstanceOf[RefinedType]
+    TypeBounds(lo, substBoundSyms(refinings(hkBound))(hkBound))
   }
 }

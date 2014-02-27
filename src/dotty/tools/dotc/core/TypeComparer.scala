@@ -407,9 +407,9 @@ class TypeComparer(initctx: Context) extends DotClass {
           if (cls2.isClass) {
             val base = tp1.baseType(cls2)
             if (base.exists && (base ne tp1)) return isSubType(base, tp2)
-            if ( cls2 == defn.SingletonClass && tp1.isStable
-              || cls2 == defn.NotNullClass && tp1.isNotNull
-              || (defn.hkTraits contains cls2) && isSubTypeHK(tp1, tp2)) return true
+            if (  cls2 == defn.SingletonClass && tp1.isStable
+               || cls2 == defn.NotNullClass && tp1.isNotNull
+               ) return true
           }
           fourthTry(tp1, tp2)
       }
@@ -576,7 +576,7 @@ class TypeComparer(initctx: Context) extends DotClass {
     case _ => proto.isMatchedBy(tp)
   }
 
-  /** Tow refinement names match if they are the same or one is the
+  /** Two refinement names match if they are the same or one is the
    *  name of a type parameter of its parent type, and the other is
    *  the corresponding higher-kinded parameter name
    */
@@ -605,27 +605,6 @@ class TypeComparer(initctx: Context) extends DotClass {
     case tp: TypeProxy => isCappable(tp.underlying)
     case tp: AndOrType => isCappable(tp.tp1) || isCappable(tp.tp2)
     case _ => false
-  }
-
-  /** Is `tp1` a subtype of a type `tp2` of the form
-   *  `scala.HigerKindedXYZ { ... }?
-   *  This is the case if `tp1` and `tp2` have the same number
-   *  of type parameters, the bounds of tp1's paremeters
-   *  are contained in the corresponding bounds of tp2's parameters
-   *  and the variances of correesponding parameters agree.
-   */
-  def isSubTypeHK(tp1: Type, tp2: Type): Boolean = {
-    val tparams = tp1.typeParams
-    val hkArgs = tp2.typeArgs
-    (hkArgs.length == tparams.length) && {
-      val base = tp1.narrow
-      (tparams, hkArgs).zipped.forall { (tparam, hkArg) =>
-        isSubType(base.memberInfo(tparam), hkArg.bounds) // TODO: base.memberInfo needed?
-      } &&
-        (tparams, tp2.typeSymbol.typeParams).zipped.forall { (tparam, tparam2) =>
-          tparam.variance == tparam2.variance
-        }
-    }
   }
 
   def trySetType(tr: NamedType, bounds: TypeBounds): Boolean =

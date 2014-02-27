@@ -417,6 +417,13 @@ object Flags {
   /** Flags that express the variance of a type parameter. */
   final val VarianceFlags = Covariant | Contravariant
 
+  /** The variance flags that correspond to given numeric variance */
+  def varianceFlags(v: Int) = v match {
+    case -1 => Contravariant
+    case  0 => Covariant
+    case  1 => EmptyFlags
+  }
+
   /** Flags that are passed from a type parameter of a class to a refinement symbol
     * that sets the type parameter */
   final val RetainedTypeArgFlags = VarianceFlags | ExpandedName | Protected | Local
