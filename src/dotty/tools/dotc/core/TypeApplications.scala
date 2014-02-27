@@ -110,8 +110,8 @@ class TypeApplications(val self: Type) extends AnyVal {
             val refinedName = tpnme.higherKindedParamName(idx)
             val refinedVariance =
               if (self.typeSymbol.isCompleting) {
-       			ctx.warning("encountered F-bounded higher-kinded type parameters; assuming they are invariant")
-        		0
+                ctx.warning("encountered F-bounded higher-kinded type parameters; assuming they are invariant")
+                0
               }
               else bound.member(refinedName).info.bounds.variance
             RefinedType(p, refinedName, TypeAlias(arg, refinedVariance))
@@ -355,23 +355,14 @@ class TypeApplications(val self: Type) extends AnyVal {
     def fail(kind: String, bound: Type): Nothing =
       throw new TypeError(s"cannot make sense of F_bounded higher-kinded $kind bound ${bound}")
     if (lo existsPart isBoundRef) fail("lower", lo)
-    def splitRefined(tp: Type): (Type, Type => Type) =
-      if (tp existsPart isBoundRef)
-        tp match {
-          case tp: RefinedType =>
-            val (tycon, rf) = splitRefined(tp.parent)
-            (tycon, rf andThen (RefinedType(_, tp.refinedName, tp.refinedInfo)))
-          case AndType(l, r) =>
-            splitRefined(l)
-          case _ =>
-            fail("upper", hi)
-        }
-      else (tp, identity)
-
-    val (parentConstr, refinings) = splitRefined(hi)
-    val hkParamInfoFns: List[RefinedType => Type] =
-      for (bsym <- boundSyms) yield substBoundSyms(bsym.info) _
-    val hkBound = RefinedType.make(hi, hkParamNames, hkParamInfoFns).asInstanceOf[RefinedType]
-    TypeBounds(lo, substBoundSyms(refinings(hkBound))(hkBound))
+    val hkBound = (hi /: (boundSyms zip hkParamNames)) {(p, sn) =>
+      val (boundSym, hkName) = sn
+      RefinedType(p, hkName, boundSym.info)
+    }
+    println(s"hkbound = $hkBound")
+    val result = TypeBounds(lo, substBoundSyms(hkBound)(hkBound.asInstanceOf[RefinedType]))
+    println(s"hkbounds = ${substBoundSyms(hkBound)(hkBound.asInstanceOf[RefinedType])}")
+    println(s"hkbounds of ${self} are ${result}")
+    result
   }
 }
