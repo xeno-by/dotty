@@ -8,6 +8,7 @@ import Contexts._
 import Types._
 import Flags._
 import Denotations._
+import SymDenotations._
 import Names._
 import StdNames._
 import NameOps._
@@ -233,9 +234,16 @@ trait Checking {
   def checkValue(tree: Tree, proto: Type)(implicit ctx: Context): tree.type = {
     if (!proto.isInstanceOf[SelectionProto]) {
       val sym = tree.tpe.termSymbol
+      val scalaPackageOutsideApply = (sym is Package) && !proto.isInstanceOf[FunProto]
       // The check is avoided inside Java compilation units because it always fails
       // on the singleton type Module.type.
-      if ((sym is Package) || ((sym is JavaModule) && !ctx.compilationUnit.isJava)) ctx.error(d"$sym is not a value", tree.pos)
+      val javaPackageInsideScala = !(sym is Package) && (sym is JavaModule) && !ctx.compilationUnit.isJava
+      if (scalaPackageOutsideApply || javaPackageInsideScala) ctx.error(d"$sym is not a value", tree.pos)
+      if ((sym is Package) && proto.isInstanceOf[FunProto]) {
+        val packageObject = sym.denot.info.member(nme.PACKAGE)
+        if (packageObject == NoDenotation) ctx.error(d"$sym is not a value", tree.pos)
+        else if (packageObject.info.member(nme.apply) == NoDenotation) ctx.error(d"$packageObject does not take parameters", tree.pos)
+      }
     }
     tree
   }
