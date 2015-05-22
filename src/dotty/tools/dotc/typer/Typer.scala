@@ -1073,10 +1073,17 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
           case _ => typedUnadapted(desugar(tree), pt)
         }
 
-        xtree match {
-          case xtree: untpd.NameTree => typedNamed(encodeName(xtree), pt)
-          case xtree: untpd.Import => typedImport(xtree, retrieveSym(xtree))
-          case xtree => typedUnnamed(xtree)
+        // NOTE: see slide #43 in http://www.slideshare.net/Odersky/scala-days-san-francisco-45917092
+        // No idea whether the intent was to only wrap an expression if its type is not a function type,
+        // but the current formulation makes life much easier.
+        if (ctx.mode.isExpr && untpd.isEligibleForWrapImplicitFunction(xtree) && pt.isImplicitFunctionType) {
+          typedUnadapted(untpd.wrapImplicitFunction(xtree, pt), pt)
+        } else {
+          xtree match {
+            case xtree: untpd.NameTree => typedNamed(encodeName(xtree), pt)
+            case xtree: untpd.Import => typedImport(xtree, retrieveSym(xtree))
+            case xtree => typedUnnamed(xtree)
+          }
         }
     }
   }

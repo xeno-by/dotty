@@ -230,6 +230,14 @@ object untpd extends Trees.Instance[Untyped] with UntypedTreeInfo {
 
   def refOfDef(tree: NameTree)(implicit ctx: Context) = Ident(tree.name)
 
+  def wrapImplicitFunction(tree: Tree, pt: Type)(implicit ctx: Context): Tree = {
+    val ctx.definitions.ImplicitFunctionType(targs @ _*) = pt
+    targs.foldLeft(tree)((acc, curr) => {
+      val tmpName = ctx.freshName("implicit$").toTermName
+      Function(List(ValDef(tmpName, TypeTree(), EmptyTree).withFlags(Implicit)), Block(Nil, acc))
+    })
+  }
+
 // ------- Decorators -------------------------------------------------
 
   implicit class UntypedTreeDecorator(val self: Tree) extends AnyVal {

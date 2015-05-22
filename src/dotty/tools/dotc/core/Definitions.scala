@@ -346,6 +346,7 @@ class Definitions {
   lazy val UncheckedStableAnnot = ctx.requiredClass("scala.annotation.unchecked.uncheckedStable")
   lazy val UncheckedVarianceAnnot = ctx.requiredClass("scala.annotation.unchecked.uncheckedVariance")
   lazy val VolatileAnnot = ctx.requiredClass("scala.volatile")
+  lazy val ImplicitAnnot = ctx.getClassIfDefined("scala.annotation.implicit")
 
   // convenient one-parameter method types
   def methOfAny(tp: Type) = MethodType(List(AnyType), tp)
@@ -402,6 +403,23 @@ class Definitions {
           (targs.length - 1 <= MaxFunctionArity) &&
           (FunctionClass(targs.length - 1) == tsym)) Some(targs.init, targs.last)
       else None
+    }
+  }
+
+  object ImplicitFunctionType {
+    def apply(arg: Type, resultType: Type)(implicit ctx: Context) =
+      FunctionType(List(AnnotatedType(Annotations.Annotation(ImplicitAnnot.asClass, Nil), arg)), resultType)
+    def unapplySeq(ift: Type)(implicit ctx: Context): Option[List[Type]] = ift.dealias match {
+      case at: RefinedType if (at isRef FunctionClass(1)) =>
+        at.argInfos match {
+          case List(AnnotatedType(annot, farg), fret)
+          if ImplicitAnnot != NoSymbol && annot.symbol == ImplicitAnnot =>
+            Some(farg :: unapplySeq(fret).getOrElse(Nil))
+          case _ =>
+            None
+        }
+      case _ =>
+        None
     }
   }
 

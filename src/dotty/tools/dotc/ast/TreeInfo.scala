@@ -268,7 +268,13 @@ trait TreeInfo[T >: Untyped <: Type] { self: Trees.Instance[T] =>
 }
 
 trait UntypedTreeInfo extends TreeInfo[Untyped] { self: Trees.Instance[Untyped] =>
-  // todo: fill with methods from TreeInfo that only apply to untpd.Tree's
+  def isEligibleForWrapImplicitFunction(tree: Tree)(implicit ctx: Context): Boolean = tree match {
+    case untpd.Function(List(ValDef(name, _, _)), Block(Nil, tree)) => !name.toString.startsWith("implicit$")
+    case Closure(_, _, _) => false
+    case Block(List(_), Closure(_, _, _)) => false
+    case EmptyTree => false
+    case _ => true
+  }
 }
 
 trait TypedTreeInfo extends TreeInfo[Type] { self: Trees.Instance[Type] =>

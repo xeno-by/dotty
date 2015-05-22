@@ -1013,6 +1013,10 @@ object Types {
             formals1 mapConserve (_.underlyingIfRepeated(mt.isJava)), mt.resultType)
     }
 
+    def isImplicitFunctionType(implicit ctx: Context): Boolean = {
+      ctx.definitions.ImplicitFunctionType.unapplySeq(this).nonEmpty
+    }
+
     /** The signature of this type. This is by default NotAMethod,
      *  but is overridden for PolyTypes, MethodTypes, and TermRefWithSignature types.
      *  (the reason why we deviate from the "final-method-with-pattern-match-in-base-class"
