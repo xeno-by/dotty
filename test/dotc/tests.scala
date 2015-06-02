@@ -38,6 +38,7 @@ class tests extends CompilerTest {
   val allowDeepSubtypes = defaultOptions diff List("-Yno-deep-subtypes")
   val allowDoubleBindings = defaultOptions diff List("-Yno-double-bindings")
   val scala2mode = List("-language:Scala2")
+  val specialise = List("-Yspecialize:all")
 
   val testsDir      = "./tests/"
   val posDir        = testsDir + "pos/"
@@ -45,6 +46,8 @@ class tests extends CompilerTest {
   val negDir        = testsDir + "neg/"
   val runDir        = testsDir + "run/"
   val newDir        = testsDir + "new/"
+  val miniMethodDir = testsDir + "method_minibox/"
+  val miniMoreDir   = testsDir + "more_minibox/"
 
   val sourceDir = "./src/"
   val dottyDir  = sourceDir + "dotty/"
@@ -281,4 +284,7 @@ class tests extends CompilerTest {
   @Test def tasty_unpickleScala2 = compileDir(coreDir, "unpickleScala2", testPickling)
   @Test def tasty_tools_io = compileDir(toolsDir, "io", testPickling)
   @Test def tasty_tests = compileDir(testsDir, "tasty", testPickling)
+  
+  @Test def mini_method = compileFiles(miniMethodDir)//, List("-Xprint:all"))
+  @Test def mini_more = compileFiles(miniMoreDir)
 }
