@@ -45,7 +45,8 @@ class Compiler {
       List(new BuildCallGraph)
       /*List(new FirstTransform,
            new CheckReentrant),
-      List(new RefChecks,
+      List(new PreSpecializer,
+           new RefChecks,
            new ElimRepeated,
            new NormalizeFlags,
            new ExtensionMethods,
