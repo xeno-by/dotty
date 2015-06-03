@@ -48,6 +48,7 @@ class tests extends CompilerTest {
   val newDir        = testsDir + "new/"
   val miniMethodDir = testsDir + "method_minibox/"
   val miniMoreDir   = testsDir + "more_minibox/"
+  val specialDir    = posDir   + "specialization/"
 
   val sourceDir = "./src/"
   val dottyDir  = sourceDir + "dotty/"
