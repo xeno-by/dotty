@@ -240,6 +240,7 @@ object Phases {
     private val explicitOuterCache = new PhaseCache(classOf[ExplicitOuter])
     private val gettersCache = new PhaseCache(classOf[Getters])
     private val genBCodeCache = new PhaseCache(classOf[GenBCode])
+    private val summariesCahce = new PhaseCache(classOf[CollectSummaries])
 
     def typerPhase = typerCache.phase
     def picklerPhase = picklerCache.phase
@@ -252,6 +253,7 @@ object Phases {
     def explicitOuterPhase = explicitOuterCache.phase
     def gettersPhase = gettersCache.phase
     def genBCodePhase = genBCodeCache.phase
+    def summariesPhase = summariesCahce.phase
 
     def isAfterTyper(phase: Phase): Boolean = phase.id > typerPhase.id
   }

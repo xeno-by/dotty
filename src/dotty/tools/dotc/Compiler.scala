@@ -39,8 +39,11 @@ class Compiler {
     List(
       List(new FrontEnd),
       List(new PostTyper),
+      //      List(new Replace),
       List(new Pickler),
-      List(new FirstTransform,
+      List(new CollectSummaries),
+      List(new BuildCallGraph)
+      /*List(new FirstTransform,
            new CheckReentrant),
       List(new RefChecks,
            new ElimRepeated,
@@ -75,6 +78,7 @@ class Compiler {
            new Constructors, // constructors changes decls in transformTemplate, no InfoTransformers should be added after it
            new FunctionalInterfaces,
            new GetClass), // getClass transformation should be applied to specialized methods
+//      List(new Linker),
       List(new LambdaLift,   // in this mini-phase block scopes are incorrect. No phases that rely on scopes should be here
            new ElimStaticThis,
            new Flatten,
@@ -83,7 +87,7 @@ class Compiler {
            new ExpandPrivate,
            new CollectEntryPoints,
            new LabelDefs),
-      List(new GenBCode)
+      List(new GenBCode)*/
     )
 
   var runId = 1
