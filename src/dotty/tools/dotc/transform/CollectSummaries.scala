@@ -317,9 +317,8 @@ class CollectSummaries extends MiniPhase { thisTransform =>
         case Apply(TypeApply(Select(New(tp), _), targs), args) => new PreciseType(tp.tpe)
         case _ =>
           x.tpe match {
-            case t: SingletonType => t
             case _ if x.isInstanceOf[NamedArg] => ref(symbolOf(x.asInstanceOf[NamedArg].arg)).tpe
-            case _ => ref(symbolOf(x)).tpe
+            case _ => x.tpe
       }})
 
       curMethodSummary.methodsCalled(storedReciever) = CallInfo(method, typeArguments.map(_.tpe), args) :: curMethodSummary.methodsCalled.getOrElse(storedReciever, Nil)
@@ -583,6 +582,10 @@ class BuildCallGraph extends Phase {
       }
       // if arg of callee is a param of caller, propagate arg fro caller to callee
       val args = callee.argumentsPassed.map {
+        case x if x.isRepeatedParam =>
+          val t = x.translateParameterized(defn.RepeatedParamClass, ctx.requiredClass("scala.collection.mutable.WrappedArray"))
+          reachableTypes += t
+          t
         case x if mode < AnalyseArgs =>
           ref(Summaries.simplifiedClassOf(x)).tpe
         case x: TermRef if x.symbol.is(Param) && x.symbol.owner == caller.call.termSymbol =>
