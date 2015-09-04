@@ -557,18 +557,25 @@ class BuildCallGraph extends Phase {
     println(s"\t Found ${reachableMethods.size} entry points")
 
 
+    def registerParentModules(tp: Type): Unit = {
+      var tp1 = tp
+      while ((tp1 ne NoType) && (tp1 ne NoPrefix)) {
+        if (tp1.widen ne tp1) registerParentModules(tp1.widen)
+        if (tp1.dealias ne tp1) registerParentModules(tp1.dealias)
+        if (tp1.termSymbol.is(Flags.Module)) {
+          reachableTypes += ref(tp1.termSymbol).tpe
+        }
+        if (tp1.typeSymbol.is(Flags.Module)) {
+          reachableTypes += ref(tp1.typeSymbol).tpe
+        }
+        tp1 = tp1.normalizedPrefix
+      }
+    }
 
     def instantiateCallSite(caller: CallInfo, rec: Type, callee: CallInfo, types: Traversable[Type]): Traversable[CallInfo] = {
 
-      val receiver = if (rec.termSymbol.is(Flags.Method) && (!rec.normalizedPrefix.termSymbol.is(Package) && !rec.normalizedPrefix.termSymbol.isPackageObject)) rec.normalizedPrefix else rec
-
-      if (receiver.termSymbol.is(Flags.Module)) {
-        reachableTypes += ref(receiver.termSymbol).tpe
-      } else {
-        val result = receiver.termSymbol.info.finalResultType
-        if (result.termSymbol.is(Flags.Module))       // module accessor
-          reachableTypes += ref(result.termSymbol).tpe
-      }
+      val receiver = callee.call.normalizedPrefix
+      registerParentModules(receiver)
 
       val callSymbol = callee.call.termSymbol
 
