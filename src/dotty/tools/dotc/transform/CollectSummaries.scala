@@ -602,9 +602,11 @@ class BuildCallGraph extends Phase {
       }
       def filterTypes(tp1: Type, tp2: Type): Boolean = {
         if (mode >= AnalyseTypes) tp1 <:< tp2
-        else tp1.classSymbol.derivesFrom(tp2.classSymbol) ||
-          tp1.derivesFrom(tp2.classSymbol) ||
-          tp1.finalResultType.derivesFrom(tp2.classSymbol)
+        else {
+          val tp1w = tp1.widenDealias
+          val tp2w = tp2.widenDealias
+          tp1w.derivesFrom(tp2w.classSymbol)
+        }
       }
       def dispatchCalls(recieverType: Type): Traversable[CallInfo] = {
         for (tp <- types
