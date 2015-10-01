@@ -611,7 +611,7 @@ class BuildCallGraph extends Phase {
       def dispatchCalls(recieverType: Type): Traversable[CallInfo] = {
         for (tp <- types
              if filterTypes(tp, recieverType);
-             alt <-  tp.member(callSymbol.name).altsWith(p => p.matches(callSymbol))
+             alt <-  tp.member(callSymbol.name).altsWith(p => p.matches(callSymbol.asSeenFrom(tp)))
              if alt.exists
         )
           yield CallInfo(tp.select(alt.symbol), targs, args)
