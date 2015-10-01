@@ -542,6 +542,10 @@ class BuildCallGraph extends Phase {
     val outerMethod = mutable.Set[Symbol]()
     // val callSites = new Worklist[CallInfo]()
 
+
+    def regularizeType(t: Type): Type =
+      t
+
     def pushEntryPoint(s: Symbol) = {
       val tpe = ref(s).tpe
       val targs = tpe.widen match {
@@ -550,7 +554,7 @@ class BuildCallGraph extends Phase {
       }
       val call = new CallInfo(tpe, (0 until targs).map(x => new ErazedType()).toList, ctx.definitions.ArrayType(ctx.definitions.StringType) :: Nil)
       reachableMethods += call
-      reachableTypes += ref(s.owner).tpe
+      reachableTypes += regularizeType(ref(s.owner).tpe)
     }
 
     collectedSummaries.values.foreach(x => if(isEntryPoint(x.methodDef)) pushEntryPoint(x.methodDef))
@@ -563,10 +567,10 @@ class BuildCallGraph extends Phase {
         if (tp1.widen ne tp1) registerParentModules(tp1.widen)
         if (tp1.dealias ne tp1) registerParentModules(tp1.dealias)
         if (tp1.termSymbol.is(Flags.Module)) {
-          reachableTypes += ref(tp1.termSymbol).tpe
+          reachableTypes += regularizeType(ref(tp1.termSymbol).tpe)
         }
         if (tp1.typeSymbol.is(Flags.Module)) {
-          reachableTypes += ref(tp1.typeSymbol).tpe
+          reachableTypes += regularizeType(ref(tp1.typeSymbol).tpe)
         }
         tp1 = tp1.normalizedPrefix
       }
@@ -591,7 +595,7 @@ class BuildCallGraph extends Phase {
       val args = callee.argumentsPassed.map {
         case x if x.isRepeatedParam =>
           val t = x.translateParameterized(defn.RepeatedParamClass, ctx.requiredClass("scala.collection.mutable.WrappedArray"))
-          reachableTypes += t
+          reachableTypes += regularizeType(t)
           t
         case x if mode < AnalyseArgs =>
           ref(Summaries.simplifiedClassOf(x)).tpe
@@ -623,7 +627,7 @@ class BuildCallGraph extends Phase {
           CallInfo(callee.call, targs, args) :: Nil
 
         case t if callSymbol.isPrimaryConstructor =>
-          reachableTypes += receiver
+          reachableTypes += regularizeType(receiver)
           CallInfo(callee.call, targs, args) :: Nil
 
           // super call in a class (know target precisely)
@@ -666,21 +670,21 @@ class BuildCallGraph extends Phase {
       for (method <- callSites) {
         // Find new call sites
 
-
+        val sym = method.call.termSymbol
 
         reachableMethods ++= {
-          val summary = collectedSummaries.get(method.call.termSymbol)
+          val summary = collectedSummaries.get(sym)
 
           if (summary.isDefined) {
 
-            reachableTypes ++= summary.get.accessedModules.map(x => ref(x).tpe)
+            reachableTypes ++= summary.get.accessedModules.map(x => regularizeType(ref(x).tpe))
 
             summary.get.methodsCalled.flatMap { x =>
               val reciever = x._1
               x._2.flatMap(callSite => instantiateCallSite(method, reciever, callSite, instantiatedTypes))
             }
           } else {
-            outerMethod += method.call.termSymbol
+            outerMethod += sym
             Nil
           }
         }
