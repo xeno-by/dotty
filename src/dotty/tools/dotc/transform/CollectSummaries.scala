@@ -618,6 +618,10 @@ class BuildCallGraph extends Phase {
       }
 
       receiver match {
+        case NoPrefix =>  // inner method
+          assert(callee.call.termSymbol.owner.is(Method) || callee.call.termSymbol.owner.isLocalDummy)
+          CallInfo(callee.call, targs, args) :: Nil
+
         case t if callSymbol.isPrimaryConstructor =>
           reachableTypes += receiver
           CallInfo(callee.call, targs, args) :: Nil
