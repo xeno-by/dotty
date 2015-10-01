@@ -657,7 +657,7 @@ class BuildCallGraph extends Phase {
       }
     }
 
-    def processCallSites(callSites: TraversableOnce[CallInfo], instantiatedTypes: Traversable[Type]) = {
+    def processCallSites(callSites: immutable.Set[CallInfo], instantiatedTypes: immutable.Set[Type]) = {
 
       for (method <- callSites) {
         // Find new call sites
@@ -689,14 +689,14 @@ class BuildCallGraph extends Phase {
     while(reachableMethods.nonEmpty && reachableTypes.nonEmpty) {
       reachableTypes.clear
 
-      val iteration = reachableMethods.newItems
+      val iteration = reachableMethods.newItems.toSet
       reachableMethods.clear
-      processCallSites(iteration, reachableTypes.reachableItems)
+      processCallSites(iteration.toSet, reachableTypes.reachableItems.toSet)
 
       if (reachableTypes.nonEmpty) {
         println(s"\t Found ${reachableTypes.size} new instantiated types")
 
-        processCallSites(reachableMethods.reachableItems, reachableTypes.newItems)
+        processCallSites(reachableMethods.reachableItems.toSet, reachableTypes.newItems.toSet)
       }
       println(s"\t Found ${reachableMethods.size} new call sites: ${reachableMethods.newItems.toString().take(60)}")
 
