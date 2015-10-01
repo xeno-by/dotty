@@ -686,7 +686,7 @@ class BuildCallGraph extends Phase {
     }
 
 
-    while(reachableMethods.nonEmpty && reachableTypes.nonEmpty) {
+    while(reachableMethods.nonEmpty || reachableTypes.nonEmpty) {
       reachableTypes.clear
 
       val iteration = reachableMethods.newItems.toSet
@@ -698,6 +698,8 @@ class BuildCallGraph extends Phase {
 
         processCallSites(reachableMethods.reachableItems.toSet, reachableTypes.newItems.toSet)
       }
+      if (!(reachableMethods.nonEmpty || reachableTypes.nonEmpty))
+        processCallSites(reachableMethods.reachableItems.toSet, reachableTypes.reachableItems.toSet)
       println(s"\t Found ${reachableMethods.size} new call sites: ${reachableMethods.newItems.toString().take(60)}")
 
     }
