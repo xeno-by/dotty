@@ -24,7 +24,8 @@ import dotty.tools.dotc.core.tasty.TastyUnpickler.SectionUnpickler
 import dotty.tools.dotc.core.{ClassfileLoader, TypeErasure, Flags}
 import dotty.tools.dotc.core.Phases.Phase
 import dotty.tools.dotc.core.tasty._
-import dotty.tools.dotc.transform.Summaries.{ErazedType, CallInfo, MethodSummary}
+import dotty.tools.dotc.transform.CollectSummaries.{SubstituteByParentMap, SubstitutedType}
+import dotty.tools.dotc.transform.Summaries.{CallWithContext, ErazedType, CallInfo, MethodSummary}
 import dotty.tools.dotc.typer.Mode
 import collection.{ mutable, immutable }
 import collection.mutable.{ LinkedHashMap, LinkedHashSet, TreeSet }
@@ -469,6 +470,9 @@ object Summaries {
                        argumentsPassed: List[Type]
                        )
 
+  class CallWithContext(call: Type, targs: List[Type], argumentsPassed: List[Type], val outerTargs: Map[Symbol, List[Type]]) extends CallInfo(call, targs, argumentsPassed)
+
+
   case class MethodSummary(methodDef: Symbol,
                            var thisAccessed: Boolean,
                            methodsCalled: mutable.Map[Type, List[CallInfo]],
@@ -537,7 +541,7 @@ class BuildCallGraph extends Phase {
 
   def buildCallGraph(mode: Int, specLimit: Int)(implicit ctx: Context) = {
     val collectedSummaries = ctx.summariesPhase.asInstanceOf[CollectSummaries].methodSummaries.map(x => (x.methodDef, x)).toMap
-    val reachableMethods = new Worklist[CallInfo]()
+    val reachableMethods = new Worklist[CallWithContext]()
     val reachableTypes = new Worklist[Type]()
     val outerMethod = mutable.Set[Symbol]()
     // val callSites = new Worklist[CallInfo]()
@@ -552,7 +556,7 @@ class BuildCallGraph extends Phase {
         case t: PolyType => t.paramNames.size
         case _ => 0
       }
-      val call = new CallInfo(tpe, (0 until targs).map(x => new ErazedType()).toList, ctx.definitions.ArrayType(ctx.definitions.StringType) :: Nil)
+      val call = new CallWithContext(tpe, (0 until targs).map(x => new ErazedType()).toList, ctx.definitions.ArrayType(ctx.definitions.StringType) :: Nil, Map.empty)
       reachableMethods += call
       reachableTypes += regularizeType(ref(s.owner).tpe)
     }
@@ -576,25 +580,34 @@ class BuildCallGraph extends Phase {
       }
     }
 
-    def instantiateCallSite(caller: CallInfo, rec: Type, callee: CallInfo, types: Traversable[Type]): Traversable[CallInfo] = {
+    def instantiateCallSite(caller: CallWithContext, rec: Type, callee: CallInfo, types: Traversable[Type]): Traversable[CallWithContext] = {
 
       val receiver = callee.call.normalizedPrefix
       registerParentModules(receiver)
 
-      val callSymbol = callee.call.termSymbol
+      val calleeSymbol = callee.call.termSymbol
+      val callerSymbol = caller.call.termSymbol
+
+      def propagateTargs(tp: Type): Type = {
+        if (mode >= AnalyseTypes && caller.targs.nonEmpty && tp.widenDealias.existsPart{x => val t = x.typeSymbol; t.exists && t.owner == callerSymbol})
+          new SubstituteByParentMap(caller.outerTargs + (callerSymbol -> caller.targs)).apply(tp.widenDealias)
+        else tp
+      }
+
+
 
       // if typearg of callee is a typeparam of caller, propagate typearg from caller to callee
       lazy val targs = callee.targs map {
         case t: TypeVar if mode >= AnalyseTypes && t.stripTypeVar.typeSymbol.owner == caller.call.termSymbol =>
           val abstractSym = callee.targs.head.stripTypeVar.typeSymbol
           val id = caller.call.termSymbol.info.asInstanceOf[PolyType].paramNames.indexOf(abstractSym.name)
-          caller.targs(id).stripTypeVar
+          propagateTargs(caller.targs(id).stripTypeVar)
         case t => t
       }
       // if arg of callee is a param of caller, propagate arg fro caller to callee
       val args = callee.argumentsPassed.map {
         case x if x.isRepeatedParam =>
-          val t = x.translateParameterized(defn.RepeatedParamClass, ctx.requiredClass("scala.collection.mutable.WrappedArray"))
+          val t = propagateTargs(x.translateParameterized(defn.RepeatedParamClass, ctx.requiredClass("scala.collection.mutable.WrappedArray")))
           reachableTypes += regularizeType(t)
           t
         case x if mode < AnalyseArgs =>
@@ -602,8 +615,18 @@ class BuildCallGraph extends Phase {
         case x: TermRef if x.symbol.is(Param) && x.symbol.owner == caller.call.termSymbol =>
           val id = caller.call.termSymbol.info.paramNamess.flatten.indexWhere(_ == x.symbol.name)
           caller.argumentsPassed(id)
-        case x => x
+        case x => propagateTargs(x)
       }
+
+      val outerTargs: Map[Symbol, List[Type]] =
+        if (mode < AnalyseTypes) Map.empty
+        else if (calleeSymbol.isProperlyContainedIn(callerSymbol)) {
+          caller.outerTargs + (callerSymbol -> caller.targs)
+        } else {
+          caller.outerTargs.filter(x => calleeSymbol.isProperlyContainedIn(x._1))
+          // todo: Is AsSeenFrom ever needed for outerTags?
+        }
+
       def filterTypes(tp1: Type, tp2: Type): Boolean = {
         if (mode >= AnalyseTypes) tp1 <:< tp2
         else {
@@ -612,60 +635,62 @@ class BuildCallGraph extends Phase {
           tp1w.derivesFrom(tp2w.classSymbol)
         }
       }
-      def dispatchCalls(recieverType: Type): Traversable[CallInfo] = {
+      def dispatchCalls(recieverType: Type): Traversable[CallWithContext] = {
         for (tp <- types
              if filterTypes(tp, recieverType);
-             alt <-  tp.member(callSymbol.name).altsWith(p => p.matches(callSymbol.asSeenFrom(tp)))
+             alt <- tp.member(calleeSymbol.name).altsWith(p => p.matches(calleeSymbol.asSeenFrom(tp)))
              if alt.exists
         )
-          yield CallInfo(tp.select(alt.symbol), targs, args)
+          yield new CallWithContext(tp.select(alt.symbol), targs, args, outerTargs)
       }
 
       receiver match {
         case NoPrefix =>  // inner method
           assert(callee.call.termSymbol.owner.is(Method) || callee.call.termSymbol.owner.isLocalDummy)
-          CallInfo(callee.call, targs, args) :: Nil
+          new CallWithContext(propagateTargs(callee.call), targs, args, outerTargs) :: Nil
 
-        case t if callSymbol.isPrimaryConstructor =>
+        case t if calleeSymbol.isPrimaryConstructor =>
           reachableTypes += regularizeType(receiver)
-          CallInfo(callee.call, targs, args) :: Nil
+          new CallWithContext(propagateTargs(callee.call), targs, args, outerTargs) :: Nil
 
           // super call in a class (know target precisely)
         case st: SuperType =>
           val thisTpe = st.thistpe
           val superTpe = st.supertpe
           val targetClass = st.supertpe.baseClasses.find(clz =>
-            clz.info.decl(callSymbol.name).altsWith(p => p.signature == callSymbol.signature).nonEmpty
+            clz.info.decl(calleeSymbol.name).altsWith(p => p.signature == calleeSymbol.signature).nonEmpty
           )
-          val targetMethod = targetClass.get.info.member(callSymbol.name).altsWith(p => p.signature == callSymbol.signature).head
+          val targetMethod = targetClass.get.info.member(calleeSymbol.name).altsWith(p => p.signature == calleeSymbol.signature).head
 
-          CallInfo(thisTpe.select(targetMethod.symbol), targs, args) :: Nil
+          new CallWithContext(propagateTargs(thisTpe.select(targetMethod.symbol)), targs, args, outerTargs) :: Nil
 
           // super call in a trait
-        case t if callSymbol.is(Flags.SuperAccessor) =>
+        case t if calleeSymbol.is(Flags.SuperAccessor) =>
           val prev = t.classSymbol
           types.flatMap {
             x =>
               val s = x.baseClasses.dropWhile(_ != prev)
               if (s.nonEmpty) {
-                val parent = s.find(x => x.info.decl(callSymbol.name).altsWith(x => x.signature == callSymbol.signature).nonEmpty)
+                val parent = s.find(x => x.info.decl(calleeSymbol.name).altsWith(x => x.signature == calleeSymbol.signature).nonEmpty)
                 parent match {
                   case Some(p) if p.exists =>
-                    val method = p.info.decl(callSymbol.name).altsWith(x => x.signature == callSymbol.signature)
-                    CallInfo(t.select(method.head.symbol), targs, args) :: Nil
+                    val method = p.info.decl(calleeSymbol.name).altsWith(x => x.signature == calleeSymbol.signature)
+                    // todo: outerTargs are here defined in terms of location of the subclass. Is this correct?
+                    new CallWithContext(t.select(method.head.symbol), targs, args, outerTargs) :: Nil
                   case _ => Nil
                 }
               } else Nil
           }
 
         case thisType: ThisType =>
-          dispatchCalls(thisType.tref)
+          // todo: handle calls on this of outer classes
+          dispatchCalls(caller.call.normalizedPrefix)
         case t =>
-          dispatchCalls(t.widenDealias)
+          dispatchCalls(propagateTargs(t.widenDealias))
       }
     }
 
-    def processCallSites(callSites: immutable.Set[CallInfo], instantiatedTypes: immutable.Set[Type]) = {
+    def processCallSites(callSites: immutable.Set[CallWithContext], instantiatedTypes: immutable.Set[Type]) = {
 
       for (method <- callSites) {
         // Find new call sites
@@ -754,5 +779,47 @@ class BuildCallGraph extends Phase {
 
     }
     runOnce = false
+  }
+}
+
+object CollectSummaries {
+
+  class SubstituteByParentMap(substMap: Map[Symbol, List[Type]])(implicit ctx: Context) extends DeepTypeMap()(ctx) {
+    def apply(tp: Type): Type = {
+      lazy val substitution = substMap.getOrElse(tp.typeSymbol.owner, Nil)
+      if (tp.typeSymbol.exists && substitution.nonEmpty) {
+        val id = tp.typeSymbol.owner.info match {
+          case t: PolyType =>
+            t.paramNames.indexOf(tp.typeSymbol.name)
+          case _ =>
+            -2
+        }
+        assert(id >= 0)
+        substitution(id).stripTypeVar
+      } else mapOver(tp)
+    }
+  }
+  def substName = "substituted".toTypeName
+
+  private val forgetHistory = false
+
+  @deprecated(message = "shoudln't be used", since = "anymore")
+  class SubstitutedType(var origTpe: Type, var substParent: Symbol, var substTypes: List[Type]) extends TypeRef(NoPrefix, substName) {
+    var substituted: Type = null
+    override def underlying(implicit ctx: Context): Type = {
+      if (substituted eq null) {
+        val tmap = new SubstituteByParentMap(Map(substParent -> substTypes))
+        substituted = TypeAlias(tmap.apply(origTpe.widenDealias))
+        if (forgetHistory) {
+          hash
+          origTpe = null
+          substParent = null
+          substTypes = null
+        }
+      }
+      substituted
+    }
+
+    def computeHash: Int = origTpe.hash ^ substParent.id ^ substTypes.foldLeft(0)(_ ^ _.hash)
   }
 }
