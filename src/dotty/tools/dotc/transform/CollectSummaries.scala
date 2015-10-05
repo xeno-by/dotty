@@ -571,9 +571,8 @@ class BuildCallGraph extends Phase {
         if (tp1.widen ne tp1) registerParentModules(tp1.widen)
         if (tp1.dealias ne tp1) registerParentModules(tp1.dealias)
         if (tp1.termSymbol.is(Flags.Module)) {
-          reachableTypes += regularizeType(ref(tp1.termSymbol).tpe)
-        }
-        if (tp1.typeSymbol.is(Flags.Module)) {
+          // reachableTypes += regularizeType(ref(tp1.termSymbol).tpe)
+        } else if (tp1.typeSymbol.is(Flags.Module)) {
           reachableTypes += regularizeType(ref(tp1.typeSymbol).tpe)
         }
         tp1 = tp1.normalizedPrefix
@@ -702,7 +701,7 @@ class BuildCallGraph extends Phase {
 
           if (summary.isDefined) {
 
-            reachableTypes ++= summary.get.accessedModules.map(x => regularizeType(ref(x).tpe))
+            reachableTypes ++= summary.get.accessedModules.map(x => regularizeType(x.info))
 
             summary.get.methodsCalled.flatMap { x =>
               val reciever = x._1
@@ -762,6 +761,11 @@ class BuildCallGraph extends Phase {
 
     println(s"\t Found: ${reachableClasses.size} reachable classes, ${reachableDefs.size} reachable methods, ${reachableSpecs.size} specializations")
     println(s"\t Found ${outerMethod.size} not defined calls: ${outerMethod.map(_.showFullName)}")
+    println(s"\t Reachable classes: ${reachableClasses.mkString(", ")}")
+    println(s"\t Reachable methods: ${reachableDefs.mkString(", ")}")
+    println(s"\t Reachable specs: ${reachableSpecs.mkString(", ")}")
+
+
   }
 
   var runOnce = true
