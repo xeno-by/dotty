@@ -470,7 +470,17 @@ object Summaries {
                        argumentsPassed: List[Type]
                        )
 
-  class CallWithContext(call: Type, targs: List[Type], argumentsPassed: List[Type], val outerTargs: Map[Symbol, List[Type]]) extends CallInfo(call, targs, argumentsPassed)
+  class CallWithContext(call: Type, targs: List[Type], argumentsPassed: List[Type], val outerTargs: Map[Symbol, List[Type]]) extends CallInfo(call, targs, argumentsPassed) {
+
+    override def hashCode(): Int = super.hashCode() ^ outerTargs.hashCode()
+
+    override def equals(obj: scala.Any): Boolean = {
+      obj match {
+        case t: CallWithContext => t.call == this.call && t.targs == this.targs && this.argumentsPassed == t.argumentsPassed &&  outerTargs == obj.asInstanceOf[CallWithContext].outerTargs
+        case _ => false
+      }
+    }
+  }
 
 
   case class MethodSummary(methodDef: Symbol,
