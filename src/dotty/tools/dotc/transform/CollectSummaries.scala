@@ -472,6 +472,8 @@ object Summaries {
 
   class CallWithContext(call: Type, targs: List[Type], argumentsPassed: List[Type], val outerTargs: Map[Symbol, List[Type]]) extends CallInfo(call, targs, argumentsPassed) {
 
+    val outEdges = mutable.HashMap[CallInfo, List[CallWithContext]]().withDefault(x => Nil)
+
     override def hashCode(): Int = super.hashCode() ^ outerTargs.hashCode()
 
     override def equals(obj: scala.Any): Boolean = {
@@ -549,7 +551,7 @@ class BuildCallGraph extends Phase {
   final val AnalyseArgs = 3
 
 
-  def buildCallGraph(mode: Int, specLimit: Int)(implicit ctx: Context) = {
+  def buildCallGraph(mode: Int, specLimit: Int)(implicit ctx: Context): String = {
     val collectedSummaries = ctx.summariesPhase.asInstanceOf[CollectSummaries].methodSummaries.map(x => (x.methodDef, x)).toMap
     val reachableMethods = new Worklist[CallWithContext]()
     val reachableTypes = new Worklist[Type]()
@@ -611,7 +613,7 @@ class BuildCallGraph extends Phase {
           val abstractSym = callee.targs.head.stripTypeVar.typeSymbol
           val id = caller.call.termSymbol.info.asInstanceOf[PolyType].paramNames.indexOf(abstractSym.name)
           propagateTargs(caller.targs(id).stripTypeVar)
-        case t => t
+        case t => t.stripTypeVar
       }
       // if arg of callee is a param of caller, propagate arg fro caller to callee
       val args = callee.argumentsPassed.map {
@@ -715,7 +717,11 @@ class BuildCallGraph extends Phase {
 
             summary.get.methodsCalled.flatMap { x =>
               val reciever = x._1
-              x._2.flatMap(callSite => instantiateCallSite(method, reciever, callSite, instantiatedTypes))
+              x._2.flatMap{callSite =>
+                val nw = instantiateCallSite(method, reciever, callSite, instantiatedTypes)
+                method.outEdges(callSite) = nw.filter(x => !method.outEdges(callSite).contains(x)).toList ::: method.outEdges(callSite)
+                nw
+              }
             }
           } else {
             outerMethod += sym
@@ -775,7 +781,86 @@ class BuildCallGraph extends Phase {
     println(s"\t Reachable methods: ${reachableDefs.mkString(", ")}")
     println(s"\t Reachable specs: ${reachableSpecs.mkString(", ")}")
 
+    val outGraph = new StringBuffer()
+    outGraph.append(s"digraph Gr${mode}_$specLimit {\n")
+    outGraph.append("graph [fontsize=10 fontname=\"Verdana\" compound=true];\n")
 
+    val slash = '"'
+
+    def typeName(x: Type): String = {
+      x match {
+        case ConstantType(value) => s"Constant($value)"
+        case _ =>
+          val t = x.termSymbol.orElse(x.typeSymbol)
+          assert(t.exists)
+          t.name.toString
+      }
+    }
+
+    def csWTToName(x: CallWithContext, close: Boolean = true, open: Boolean = true) = {
+      s"${if (open) slash else ""}${x.call.termSymbol.showFullName}${if (x.targs.nonEmpty)"[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
+    }
+
+    def csToName(parrent: CallWithContext, inner: CallInfo): String = {
+       csWTToName(parrent, close = false) + s"${inner.call.show}${inner.hashCode()}$slash"
+    }
+
+    def dummyName(x: CallWithContext) = {
+      csWTToName(x, close=false) + "_Dummy\""
+    }
+
+    def clusterName(x: CallWithContext) =
+      "\"cluster_" + csWTToName(x, open=false)
+
+    // add names and subraphs
+    reachableMethods.reachableItems.foreach { caller =>
+      def callSiteLabel(x: CallInfo): String = {
+        val prefix = x.call.normalizedPrefix
+        val calleeSymbol = x.call.termSymbol
+        prefix match {
+          case NoPrefix => calleeSymbol.name.toString
+          case t if calleeSymbol.isPrimaryConstructor => calleeSymbol.showFullName
+          case st: SuperType => s"super[${st.supertpe.classSymbol.showFullName}].${calleeSymbol.name}"
+         /* case t if calleeSymbol.is(Flags.SuperAccessor) =>
+            val prev = t.classSymbol
+            types.flatMap {
+              x =>
+                val s = x.baseClasses.dropWhile(_ != prev)
+                if (s.nonEmpty) {
+                  val parent = s.find(x => x.info.decl(calleeSymbol.name).altsWith(x => x.signature == calleeSymbol.signature).nonEmpty)
+                  parent match {
+                    case Some(p) if p.exists =>
+                      val method = p.info.decl(calleeSymbol.name).altsWith(x => x.signature == calleeSymbol.signature)
+                      // todo: outerTargs are here defined in terms of location of the subclass. Is this correct?
+                      new CallWithContext(t.select(method.head.symbol), targs, args, outerTargs) :: Nil
+                    case _ => Nil
+                  }
+                } else Nil
+            }     */
+
+          case thisType: ThisType => s"this.${calleeSymbol.name}"
+          case t =>
+            s"${typeName(t)}.${calleeSymbol.name}"
+        }
+      }
+
+      val line = s"""subgraph ${clusterName(caller)} {
+          label = ${csWTToName(caller)}; color = ${if (outerMethod.contains(caller.call.termSymbol)) "red" else "blue"};
+          ${dummyName(caller)} [shape=point style=invis];
+        ${caller.outEdges.keys.map(x => csToName(caller, x) + s" [label = $slash${callSiteLabel(x)}$slash];").mkString("\n")}
+        }
+        """
+      outGraph.append(line)
+      val edges = caller.outEdges.foreach { x =>
+        val callInfo = x._1
+        x._2.foreach { target =>
+          val line = s"${csToName(caller, callInfo)} -> ${dummyName(target)} [ltail=${clusterName(target)}];\n"
+          outGraph.append(line)
+        }
+      }
+    }
+    outGraph.append("}")
+    outGraph.toString
   }
 
   var runOnce = true
@@ -783,13 +868,28 @@ class BuildCallGraph extends Phase {
     if (runOnce) {
       val specLimit = 15
       println(s"\n\t\t\tOriginal analisys")
-      buildCallGraph(AnalyseOrig, specLimit)
+      val g1 = buildCallGraph(AnalyseOrig, specLimit)
 
       println(s"\n\t\t\tType flow analisys")
-      buildCallGraph(AnalyseTypes, specLimit)
+      val g2 = buildCallGraph(AnalyseTypes, specLimit)
 
       println(s"\n\t\t\tType & Arg flow analisys")
-      buildCallGraph(AnalyseArgs, specLimit)
+      val g3 = buildCallGraph(AnalyseArgs, specLimit)
+
+      def printToFile(f: java.io.File)(op: java.io.PrintWriter => Unit) {
+        val p = new java.io.PrintWriter(f)
+        try { op(p) } finally { p.close() }
+      }
+
+      printToFile(new java.io.File("out1.dot")) { out =>
+        out.println(g1)
+      }
+      printToFile(new java.io.File("out2.dot")) { out =>
+        out.println(g2)
+      }
+      printToFile(new java.io.File("out3.dot")) { out =>
+        out.println(g3)
+      }
 
     }
     runOnce = false
