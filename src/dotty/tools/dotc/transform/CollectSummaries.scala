@@ -24,7 +24,7 @@ import dotty.tools.dotc.core.tasty.TastyUnpickler.SectionUnpickler
 import dotty.tools.dotc.core.{ClassfileLoader, TypeErasure, Flags}
 import dotty.tools.dotc.core.Phases.Phase
 import dotty.tools.dotc.core.tasty._
-import dotty.tools.dotc.transform.CollectSummaries.{SubstituteByParentMap, SubstitutedType}
+import dotty.tools.dotc.transform.CollectSummaries.{SubstituteByParentMap}
 import dotty.tools.dotc.transform.Summaries.{CallWithContext, ErazedType, CallInfo, MethodSummary}
 import dotty.tools.dotc.typer.Mode
 import collection.{ mutable, immutable }
@@ -807,23 +807,4 @@ object CollectSummaries {
 
   private val forgetHistory = false
 
-  @deprecated(message = "shoudln't be used", since = "anymore")
-  class SubstitutedType(var origTpe: Type, var substParent: Symbol, var substTypes: List[Type]) extends TypeRef(NoPrefix, substName) {
-    var substituted: Type = null
-    override def underlying(implicit ctx: Context): Type = {
-      if (substituted eq null) {
-        val tmap = new SubstituteByParentMap(Map(substParent -> substTypes))
-        substituted = TypeAlias(tmap.apply(origTpe.widenDealias))
-        if (forgetHistory) {
-          hash
-          origTpe = null
-          substParent = null
-          substTypes = null
-        }
-      }
-      substituted
-    }
-
-    def computeHash: Int = origTpe.hash ^ substParent.id ^ substTypes.foldLeft(0)(_ ^ _.hash)
-  }
 }
