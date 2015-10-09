@@ -737,9 +737,9 @@ class BuildCallGraph extends Phase {
               } else Nil
           }
 
-        case thisType: ThisType =>
+       /* case thisType: ThisType =>
           // todo: handle calls on this of outer classes
-          dispatchCalls(caller.call.normalizedPrefix)
+          dispatchCalls(caller.call.normalizedPrefix)*/
         case t =>
           dispatchCalls(propagateTargs(t.widenDealias))
       }
