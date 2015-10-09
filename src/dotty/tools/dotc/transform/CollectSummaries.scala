@@ -702,11 +702,13 @@ class BuildCallGraph extends Phase {
       receiver match {
         case NoPrefix =>  // inner method
           assert(callee.call.termSymbol.owner.is(Method) || callee.call.termSymbol.owner.isLocalDummy)
-          new CallWithContext(propagateTargs(callee.call), targs, args, outerTargs) :: Nil
+          new CallWithContext(callee.call, targs, args, outerTargs) :: Nil
 
         case t if calleeSymbol.isPrimaryConstructor =>
-          reachableTypes += regularizeType(receiver)
-          new CallWithContext(propagateTargs(callee.call), targs, args, outerTargs) :: Nil
+          val t = regularizeType(propagateTargs(callee.call.appliedTo(targs)).widen.resultType)
+          reachableTypes += new TypeWithContext(t, parentRefinements(t))
+
+          new CallWithContext(propagateTargs(receiver).select(calleeSymbol), targs, args, outerTargs) :: Nil
 
           // super call in a class (know target precisely)
         case st: SuperType =>
@@ -717,7 +719,7 @@ class BuildCallGraph extends Phase {
           )
           val targetMethod = targetClass.get.info.member(calleeSymbol.name).altsWith(p => p.signature == calleeSymbol.signature).head
 
-          new CallWithContext(propagateTargs(thisTpe.select(targetMethod.symbol)), targs, args, outerTargs) :: Nil
+          new CallWithContext(propagateTargs(thisTpe).select(targetMethod.symbol), targs, args, outerTargs) :: Nil
 
           // super call in a trait
         case t if calleeSymbol.is(Flags.SuperAccessor) =>
