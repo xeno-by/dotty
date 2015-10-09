@@ -578,6 +578,7 @@ class BuildCallGraph extends Phase {
     val collectedSummaries = ctx.summariesPhase.asInstanceOf[CollectSummaries].methodSummaries.map(x => (x.methodDef, x)).toMap
     val reachableMethods = new Worklist[CallWithContext]()
     val reachableTypes = new Worklist[TypeWithContext]()
+    val casts = new Worklist[Cast]()
     val outerMethod = mutable.Set[Symbol]()
     // val callSites = new Worklist[CallInfo]()
 
@@ -697,9 +698,40 @@ class BuildCallGraph extends Phase {
              if alt.exists
         )
           yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs)
+
+        val casted = if (mode < AnalyseTypes) Nil else
+          for (tp <- types;
+            cast <- casts.reachableItems.toSet
+            if filterTypes(tp.tp, cast.from) && filterTypes(cast.to, recieverType);
+            alt <- tp.tp.member(calleeSymbol.name).altsWith(p => p.matches(calleeSymbol.asSeenFrom(tp.tp)))
+            if alt.exists && {
+              // this additionaly introduces a cast of result type and argument types
+
+              def addCast(from: Type, to: Type) =
+                if (!(from <:< to))
+                  casts += new Cast(from, to)
+
+              val uncastedSig = tp.tp.select(alt.symbol).appliedTo(targs).widen
+              val castedSig = recieverType.select(calleeSymbol).appliedTo(targs).widen
+              (uncastedSig.paramTypess.flatten zip castedSig.paramTypess.flatten) foreach (x => addCast(x._2, x._1))
+              addCast(uncastedSig.finalResultType, castedSig.finalResultType)
+
+              true
+            })
+        yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs)
+
+        dirrect ++ casted
       }
 
       receiver match {
+        case _ if defn.ObjectMethods.contains(calleeSymbol) =>
+          // TODO: only for paper
+          Nil
+        case _ if calleeSymbol == ctx.definitions.Any_asInstanceOf =>
+          val from = propagateTargs(receiver)
+          val to = propagateTargs(targs.head)
+          casts += new Cast(from, to)
+          Nil
         case NoPrefix =>  // inner method
           assert(callee.call.termSymbol.owner.is(Method) || callee.call.termSymbol.owner.isLocalDummy)
           new CallWithContext(callee.call, targs, args, outerTargs) :: Nil
@@ -780,32 +812,27 @@ class BuildCallGraph extends Phase {
     }
 
 
-    while(reachableMethods.nonEmpty || reachableTypes.nonEmpty) {
+    while(reachableMethods.nonEmpty || reachableTypes.nonEmpty || casts.nonEmpty) {
       reachableTypes.clear
-
-      val iteration = reachableMethods.newItems.toSet
+      casts.clear
       reachableMethods.clear
-      processCallSites(iteration.toSet, reachableTypes.reachableItems.toSet)
 
-      if (reachableTypes.nonEmpty) {
-        println(s"\t Found ${reachableTypes.size} new instantiated types")
+      processCallSites(reachableMethods.reachableItems.toSet, reachableTypes.reachableItems.toSet)
 
-        processCallSites(reachableMethods.reachableItems.toSet, reachableTypes.newItems.toSet)
-      }
-      if (!(reachableMethods.nonEmpty || reachableTypes.nonEmpty))
-        processCallSites(reachableMethods.reachableItems.toSet, reachableTypes.reachableItems.toSet)
+      println(s"\t Found ${reachableTypes.size} new instantiated types")
+
       println(s"\t Found ${reachableMethods.size} new call sites: ${reachableMethods.newItems.toString().take(60)}")
 
     }
 
-    val reachableClasses = reachableMethods.reachableItems.map(_.call.termSymbol.owner.info.widen.classSymbol)
+    val reachableClasses = reachableMethods.reachableItems.map(_.call.termSymbol.maybeOwner.info.widen.classSymbol)
     val reachableDefs = reachableMethods.reachableItems.map(_.call.termSymbol)
 
 
     val reachableSpecs: mutable.Set[(Symbol, List[Type])] = reachableMethods.reachableItems.flatMap { x =>
-       val clas = x.call.termSymbol.owner.info.widen.classSymbol
+       val clas = x.call.termSymbol.maybeOwner.info.widen.classSymbol
        val meth = x.call.termSymbol
-      if (mode >= AnalyseTypes) (meth, x.call.termSymbol.owner.info.baseArgInfos(clas)) :: Nil
+      if (mode >= AnalyseTypes) (meth, x.call.termSymbol.maybeOwner.info.baseArgInfos(clas)) :: Nil
       else {
         val clazSpecializationsCount =
            if (clas.primaryConstructor.info.widenDealias.isInstanceOf[PolyType]) specLimit
