@@ -857,16 +857,19 @@ class BuildCallGraph extends Phase {
     val outGraph = new StringBuffer()
     outGraph.append(s"digraph Gr${mode}_$specLimit {\n")
     outGraph.append("graph [fontsize=10 fontname=\"Verdana\" compound=true];\n")
+    outGraph.append("label = \""+reachableMethods.reachableItems.size + " nodes, "
+      + reachableMethods.reachableItems.foldLeft(0)(_ + _.outEdges.values.foldLeft(0)(_ + _.size)) +" edges\";")
 
     val slash = '"'
 
     def typeName(x: Type): String = {
       x match {
-        case ConstantType(value) => s"Constant($value)"
+        case ConstantType(value) => s"$value"
         case _ =>
           val t = x.termSymbol.orElse(x.typeSymbol)
-          assert(t.exists)
-          t.name.toString
+          if (t.exists)
+           t.name.toString
+          else x.show
       }
     }
 
