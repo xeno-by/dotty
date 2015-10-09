@@ -974,16 +974,47 @@ object CollectSummaries {
   class SubstituteByParentMap(substMap: Map[Symbol, List[Type]])(implicit ctx: Context) extends DeepTypeMap()(ctx) {
     def apply(tp: Type): Type = {
       lazy val substitution = substMap.getOrElse(tp.typeSymbol.owner, Nil)
-      if (tp.typeSymbol.exists && substitution.nonEmpty) {
-        val id = tp.typeSymbol.owner.info match {
-          case t: PolyType =>
-            t.paramNames.indexOf(tp.typeSymbol.name)
-          case _ =>
-            -2
-        }
-        assert(id >= 0)
-        substitution(id).stripTypeVar
-      } else mapOver(tp)
+      def termTypeIfNeed(t: Type): Type = {
+        if (tp.isInstanceOf[TermType] && !t.isInstanceOf[TermType]) {
+          t match {
+            case t: TypeAlias =>
+              assert(t.underlying.isInstanceOf[TermType])
+              t.underlying
+            case _ =>
+              assert(false)
+              ???
+          }
+        } else t
+      }
+      tp match {
+        case tp: RefinedType => mapOver(tp) // otherwise we will loose refinement
+        case tp: TypeAlias => mapOver(tp) // map underlying
+        case tp if tp.typeSymbol.exists && substitution.nonEmpty =>
+          val id = tp.typeSymbol.owner.info match {
+            case t: PolyType =>
+              t.paramNames.indexOf(tp.typeSymbol.name)
+            case t: ClassInfo =>
+              var typ = tp
+              var id = t.typeParams.indexOf(typ.typeSymbol)
+              while (id < 0 && (tp.typeSymbol.info.typeSymbol ne tp.typeSymbol)) {
+                typ = tp.typeSymbol.info
+                id = t.typeParams.indexOf(typ.typeSymbol)
+              }
+              id
+            case _ =>
+              -2
+          }
+          assert(id >= 0)
+          val t = substitution(id).stripTypeVar
+          termTypeIfNeed(t)
+        case t: TypeRef if (t.prefix.normalizedPrefix eq NoPrefix) =>
+          val tmp = apply(t.info)
+          if (tmp ne t.info) termTypeIfNeed(tmp)
+          else mapOver(t)
+        case _ => mapOver(tp)
+
+      }
+
     }
   }
   def substName = "substituted".toTypeName
