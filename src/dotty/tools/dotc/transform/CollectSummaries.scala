@@ -25,7 +25,7 @@ import dotty.tools.dotc.core.{ClassfileLoader, TypeErasure, Flags}
 import dotty.tools.dotc.core.Phases.Phase
 import dotty.tools.dotc.core.tasty._
 import dotty.tools.dotc.transform.CollectSummaries.{SubstituteByParentMap}
-import dotty.tools.dotc.transform.Summaries.{CallWithContext, ErazedType, CallInfo, MethodSummary}
+import dotty.tools.dotc.transform.Summaries._
 import dotty.tools.dotc.typer.Mode
 import collection.{ mutable, immutable }
 import collection.mutable.{ LinkedHashMap, LinkedHashSet, TreeSet }
@@ -346,7 +346,7 @@ class CollectSummaries extends MiniPhase { thisTransform =>
     }
 
     override def transformSelect(tree: tpd.Select)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
-      if (!tree.symbol.is(Flags.Package)) {
+      if (!tree.symbol.is(Flags.Package | Flags.Label)) {
         registerModule(tree.symbol)
         registerCall(tree)
       }
@@ -360,7 +360,8 @@ class CollectSummaries extends MiniPhase { thisTransform =>
     }
 
     override def transformApply(tree: tpd.Apply)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
-      registerCall(tree)
+      if (!tree.symbol.is(Flags.Label))
+       registerCall(tree)
       tree
     }
 
