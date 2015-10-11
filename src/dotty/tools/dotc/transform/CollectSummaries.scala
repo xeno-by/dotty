@@ -755,19 +755,16 @@ class BuildCallGraph extends Phase {
 
           // super call in a trait
         case t if calleeSymbol.is(Flags.SuperAccessor) =>
-          val prev = t.classSymbol
+
+          val prev = t.widenDealias.classSymbol
           types.flatMap {
             x =>
               val s = x.tp.baseClasses.dropWhile(_ != prev)
               if (s.nonEmpty) {
-                val parent = s.find(x => x.info.decl(calleeSymbol.name).altsWith(x => x.signature == calleeSymbol.signature).nonEmpty)
-                parent match {
-                  case Some(p) if p.exists =>
-                    val method = p.info.decl(calleeSymbol.name).altsWith(x => x.signature == calleeSymbol.signature)
-                    // todo: outerTargs are here defined in terms of location of the subclass. Is this correct?
-                    new CallWithContext(t.select(method.head.symbol), targs, args, outerTargs) :: Nil
-                  case _ => Nil
-                }
+                val parentMethod = ResolveSuper.rebindSuper(x.tp.widenDealias.classSymbol, calleeSymbol)
+                // todo: outerTargs are here defined in terms of location of the subclass. Is this correct?
+                new CallWithContext(t.select(parentMethod), targs, args, outerTargs) :: Nil
+
               } else Nil
           }
 
