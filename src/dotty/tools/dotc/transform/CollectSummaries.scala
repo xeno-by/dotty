@@ -686,7 +686,8 @@ class BuildCallGraph extends Phase {
         else {
           val tp1w = tp1.widenDealias
           val tp2w = tp2.widenDealias
-          tp1w.derivesFrom(tp2w.classSymbol)
+          val tp2c = tp2w.classSymbol.orElse(TypeErasure.erasure(tp2).classSymbol)
+          tp1w.derivesFrom(tp2c)
         }
       }
       def dispatchCalls(recieverType: Type): Traversable[CallWithContext] = {
