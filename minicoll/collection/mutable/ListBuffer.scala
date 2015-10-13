@@ -51,6 +51,7 @@ final class ListBuffer[A]
          with SeqForwarder[A]
          with Serializable
 {
+  override  protected[this] def newBuilder: Builder[A, ListBuffer[A]] = companion.newBuilder[A]
   override def companion: GenericCompanion[ListBuffer] = ListBuffer
 
   import scala.collection.Traversable

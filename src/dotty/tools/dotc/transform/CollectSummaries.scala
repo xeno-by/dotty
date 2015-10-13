@@ -471,7 +471,34 @@ object Summaries {
                        argumentsPassed: List[Type]
                        )
 
-  class CallWithContext(call: Type, targs: List[Type], argumentsPassed: List[Type], val outerTargs: Map[Symbol, List[Type]]) extends CallInfo(call, targs, argumentsPassed) {
+  final case class OuterTargs(val mp: Map[Symbol, Map[Name, Type]]) extends AnyVal {
+    def ++(parent: (Symbol, List[Type]))(implicit ctx: Context): OuterTargs = {
+      parent._2.foldLeft(this)((x, y) => x.+(parent._1, y))
+    }
+    def +(parent: (Symbol, Type))(implicit ctx: Context): OuterTargs = {
+      this.+(parent._1, parent._2)
+    }
+    def +(parent: Symbol, tp: Type)(implicit ctx: Context): OuterTargs = {
+      this.+(parent, tp.typeSymbol.name, tp)
+    }
+    def +(parent: Symbol, name: Name, tp: Type): OuterTargs = {
+      val old = mp.getOrElse(parent, Map.empty)
+      new OuterTargs(mp.updated(parent, old + (name -> tp)))
+    }
+    def nonEmpty = mp.nonEmpty
+    def ++(other: OuterTargs)(implicit ctx: Context) = {
+      other.mp.foldLeft(this) { (x, y) =>
+        y._2.foldLeft(x: OuterTargs)((x: OuterTargs, z: (Name, Type)) => x.+(y._1, z._1, z._2))
+      }
+    }
+  }
+
+  object OuterTargs {
+    def empty = new OuterTargs(Map.empty)
+  }
+
+  class CallWithContext(call: Type, targs: List[Type], argumentsPassed: List[Type], val outerTargs: OuterTargs) extends CallInfo(call, targs, argumentsPassed) {
+
 
     val outEdges = mutable.HashMap[CallInfo, List[CallWithContext]]().withDefault(x => Nil)
 
@@ -485,7 +512,7 @@ object Summaries {
     }
   }
 
-  class TypeWithContext(val tp: Type, val outerTargs: Map[Symbol, List[Type]]) {
+  class TypeWithContext(val tp: Type, val outerTargs: OuterTargs) {
     override def hashCode(): Int = tp.hashCode() * 31 + outerTargs.hashCode()
 
     override def equals(obj: scala.Any): Boolean = obj match {
@@ -592,7 +619,7 @@ class BuildCallGraph extends Phase {
         case t: PolyType => t.paramNames.size
         case _ => 0
       }
-      val call = new CallWithContext(tpe, (0 until targs).map(x => new ErazedType()).toList, ctx.definitions.ArrayType(ctx.definitions.StringType) :: Nil, Map.empty)
+      val call = new CallWithContext(tpe, (0 until targs).map(x => new ErazedType()).toList, ctx.definitions.ArrayType(ctx.definitions.StringType) :: Nil, OuterTargs.empty)
       reachableMethods += call
       val t = regularizeType(ref(s.owner).tpe)
       reachableTypes += new TypeWithContext(t, parentRefinements(t))
@@ -601,22 +628,22 @@ class BuildCallGraph extends Phase {
     collectedSummaries.values.foreach(x => if(isEntryPoint(x.methodDef)) pushEntryPoint(x.methodDef))
     println(s"\t Found ${reachableMethods.size} entry points")
 
-    def parentRefinements(tp: Type): Map[Symbol, List[Type]] =
-      new TypeAccumulator[Map[Symbol, List[Type]]]() {
-        def apply(x: Map[Symbol, List[Type]], tp: Type): Map[Symbol, List[Type]] = tp match {
+    def parentRefinements(tp: Type): OuterTargs =
+      new TypeAccumulator[OuterTargs]() {
+        def apply(x: OuterTargs, tp: Type): OuterTargs = tp match {
           case t: RefinedType =>
             val member = t.parent.member(t.refinedName).symbol
             val parent = member.owner
             val tparams = parent.info.typeParams
             val id = tparams.indexOf(member)
-            assert(id >= 0)
+            // assert(id >= 0) // TODO: IS this code needed at all?
 
-            val nlist = x.getOrElse(parent, List.fill(tparams.size)(WildcardType)).updated(id, t.refinedInfo)
-            foldOver(x +  (parent -> nlist), tp)
+            val nlist = x +(parent, t.refinedName, t.refinedInfo)
+            foldOver(nlist, tp)
           case _ =>
             foldOver(x, tp)
         }
-      }.apply(Map.empty, tp)
+      }.apply(OuterTargs.empty, tp)
 
     def registerParentModules(tp: Type): Unit = {
       var tp1 = tp
@@ -641,10 +668,39 @@ class BuildCallGraph extends Phase {
       val calleeSymbol = callee.call.termSymbol
       val callerSymbol = caller.call.termSymbol
 
-      def propagateTargs(tp: Type): Type = {
-        if (mode >= AnalyseTypes && (caller.targs.nonEmpty || caller.outerTargs.nonEmpty)/* && tp.widenDealias.existsPart{x => val t = x.typeSymbol; t.exists && (t.owner == callerSymbol || caller.outerTargs.contains(t.owner))}*/)
-          new SubstituteByParentMap(caller.outerTargs + (callerSymbol -> caller.targs)).apply(tp.widenDealias)
-        else tp
+      val tpamsOuter = caller.call.widen match {
+        case PolyType(names) =>
+          (names zip caller.targs).foldLeft(OuterTargs.empty)((x, nameType) => x.+(callerSymbol, nameType._1, nameType._2))
+        case _ =>
+          OuterTargs.empty
+      }
+
+      def propagateTargs(tp: Type, isConstructor: Boolean = false): Type = {
+        if (mode >= AnalyseTypes && (caller.targs.nonEmpty || caller.outerTargs.nonEmpty || (callerSymbol.owner ne caller.call.normalizedPrefix.classSymbol))) {
+          /* && tp.widenDealias.existsPart{x => val t = x.typeSymbol; t.exists && (t.owner == callerSymbol || caller.outerTargs.contains(t.owner))}*/
+          val outerParent = if (callerSymbol.owner ne caller.call.normalizedPrefix.classSymbol) {
+            val current = caller.call.normalizedPrefix
+            val superTpe = callerSymbol.owner.info
+            val outers = current.typeMembers.foldLeft(OuterTargs.empty) { (outerTargs: OuterTargs, x) =>
+              val old = superTpe.member(x.symbol.name)
+              if (old.exists) outerTargs + (callerSymbol.owner, x.symbol.name, x.info) else outerTargs
+            }
+            outers
+          } else OuterTargs.empty
+
+          val outerTargs = caller.outerTargs ++ tpamsOuter ++ outerParent
+          val substitution = new SubstituteByParentMap(outerTargs)
+
+          val refinedClassType = if (isConstructor) {
+            val refinedConstructedType = tp.typeMembers.foldLeft(tp){(acc, memberType) =>
+              val refinedInfo = substitution.apply(memberType.info)
+              if (refinedInfo ne memberType.info) RefinedType(acc, memberType.symbol.name, refinedInfo)
+              else acc
+            }
+            refinedConstructedType
+          } else tp.widenDealias
+          new SubstituteByParentMap(outerTargs).apply(refinedClassType)
+        } else tp
       }
 
 
@@ -672,12 +728,12 @@ class BuildCallGraph extends Phase {
         case x => propagateTargs(x)
       }
 
-      val outerTargs: Map[Symbol, List[Type]] =
-        if (mode < AnalyseTypes) Map.empty
+      val outerTargs: OuterTargs =
+        if (mode < AnalyseTypes) OuterTargs.empty
         else if (calleeSymbol.isProperlyContainedIn(callerSymbol)) {
-          caller.outerTargs + (callerSymbol -> caller.targs)
+          caller.outerTargs ++ tpamsOuter
         } else {
-          caller.outerTargs.filter(x => calleeSymbol.isProperlyContainedIn(x._1))
+          new OuterTargs(caller.outerTargs.mp.filter(x => calleeSymbol.isProperlyContainedIn(x._1)))
           // todo: Is AsSeenFrom ever needed for outerTags?
         }
 
@@ -738,8 +794,9 @@ class BuildCallGraph extends Phase {
           new CallWithContext(callee.call, targs, args, outerTargs) :: Nil
 
         case t if calleeSymbol.isPrimaryConstructor =>
-          val t = regularizeType(propagateTargs(callee.call.appliedTo(targs)).widen.resultType)
-          reachableTypes += new TypeWithContext(t, parentRefinements(t))
+
+          val tpe =  regularizeType(propagateTargs(callee.call.appliedTo(targs).widen.resultType, isConstructor = true))
+          reachableTypes += new TypeWithContext(tpe, parentRefinements(tpe) ++ outerTargs)
 
           new CallWithContext(propagateTargs(receiver).select(calleeSymbol), targs, args, outerTargs) :: Nil
 
@@ -751,8 +808,9 @@ class BuildCallGraph extends Phase {
             clz.info.decl(calleeSymbol.name).altsWith(p => p.signature == calleeSymbol.signature).nonEmpty
           )
           val targetMethod = targetClass.get.info.member(calleeSymbol.name).altsWith(p => p.signature == calleeSymbol.signature).head
+          val thisTpePropagated = propagateTargs(thisTpe)
 
-          new CallWithContext(propagateTargs(thisTpe).select(targetMethod.symbol), targs, args, outerTargs) :: Nil
+          new CallWithContext(thisTpePropagated.select(targetMethod.symbol), targs, args, outerTargs) :: Nil
 
           // super call in a trait
         case t if calleeSymbol.is(Flags.SuperAccessor) =>
@@ -972,9 +1030,9 @@ class BuildCallGraph extends Phase {
 
 object CollectSummaries {
 
-  class SubstituteByParentMap(substMap: Map[Symbol, List[Type]])(implicit ctx: Context) extends DeepTypeMap()(ctx) {
+  class SubstituteByParentMap(substMap: OuterTargs)(implicit ctx: Context) extends DeepTypeMap()(ctx) {
     def apply(tp: Type): Type = {
-      lazy val substitution = substMap.getOrElse(tp.typeSymbol.owner, Nil)
+      lazy val substitution = substMap.mp.getOrElse(tp.typeSymbol.owner, Nil)
       def termTypeIfNeed(t: Type): Type = {
         if (tp.isInstanceOf[TermType] && !t.isInstanceOf[TermType]) {
           t match {
@@ -991,7 +1049,8 @@ object CollectSummaries {
         case tp: RefinedType => mapOver(tp) // otherwise we will loose refinement
         case tp: TypeAlias => mapOver(tp) // map underlying
         case tp if tp.typeSymbol.exists && substitution.nonEmpty =>
-          val id = tp.typeSymbol.owner.info match {
+          var typ = tp
+          /*val id = tp.typeSymbol.owner.info match {
             case t: PolyType =>
               t.paramNames.indexOf(tp.typeSymbol.name)
             case t: ClassInfo =>
@@ -1004,10 +1063,22 @@ object CollectSummaries {
               id
             case _ =>
               -2
+          } */
+          var id = substitution.find(x => x._1 == tp.typeSymbol.name)
+          var limit = 30
+          var stack: List[Type] = Nil
+          while (id.isEmpty && (limit > 0) && (typ.typeSymbol.info.typeSymbol ne typ.typeSymbol)) {
+            typ = typ.typeSymbol.info
+            stack = typ :: stack
+            id = substitution.find(x => x._1 == typ.typeSymbol.name)
+            limit -= 1
           }
-          assert(id >= 0)
-          val t = substitution(id).stripTypeVar
-          termTypeIfNeed(t)
+
+          // assert(id.isDefined)
+          if (id.isDefined) {
+            val t = id.get._2.stripTypeVar
+            apply(termTypeIfNeed(t))
+          } else tp
         case t: TypeRef if (t.prefix.normalizedPrefix eq NoPrefix) =>
           val tmp = apply(t.info)
           if (tmp ne t.info) termTypeIfNeed(tmp)
