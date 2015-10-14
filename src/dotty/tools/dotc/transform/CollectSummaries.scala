@@ -859,8 +859,18 @@ class BuildCallGraph extends Phase {
           // super call in a trait
         case t if calleeSymbol.is(Flags.SuperAccessor) =>
 
+          // Taken from ResolveSuper.rebindSuper
+          val unexpandedAccName =
+            if (calleeSymbol.is(ExpandedName))  // Cannot use unexpandedName because of #765. t2183.scala would fail if we did.
+              calleeSymbol.name
+                .drop(calleeSymbol.name.indexOfSlice(nme.EXPAND_SEPARATOR ++ nme.SUPER_PREFIX))
+                .drop(nme.EXPAND_SEPARATOR.length)
+            else calleeSymbol.name
+
+          val SuperAccessorName(memberName) = unexpandedAccName: Name
+
           val prev = t.widenDealias.classSymbol
-          types.flatMap {
+          getTypesByMemberName(memberName).flatMap {
             x =>
               val s = x.tp.baseClasses.dropWhile(_ != prev)
               if (s.nonEmpty) {
