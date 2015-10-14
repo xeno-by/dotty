@@ -513,6 +513,8 @@ object Summaries {
   }
 
   class TypeWithContext(val tp: Type, val outerTargs: OuterTargs) {
+    val castsCache: mutable.Set[Cast] = mutable.Set.empty
+
     override def hashCode(): Int = tp.hashCode() * 31 + outerTargs.hashCode()
 
     override def equals(obj: scala.Any): Boolean = obj match {
@@ -602,6 +604,7 @@ class BuildCallGraph extends Phase {
 
 
   def buildCallGraph(mode: Int, specLimit: Int)(implicit ctx: Context): String = {
+    val startTime = java.lang.System.currentTimeMillis()
     val collectedSummaries = ctx.summariesPhase.asInstanceOf[CollectSummaries].methodSummaries.map(x => (x.methodDef, x)).toMap
     val reachableMethods = new Worklist[CallWithContext]()
     val reachableTypes = new Worklist[TypeWithContext]()
@@ -737,6 +740,18 @@ class BuildCallGraph extends Phase {
           // todo: Is AsSeenFrom ever needed for outerTags?
         }
 
+      def addCast(from: Type, to: Type) =
+        if (!(from <:< to)) {
+          val newCast = new Cast(from, to)
+
+          for (tp <- reachableTypes.reachableItems) {
+            if (filterTypes(tp.tp, from)) {
+              casts += newCast
+              tp.castsCache += newCast
+            }
+          }
+        }
+
       def filterTypes(tp1: Type, tp2: Type): Boolean = {
         if (mode >= AnalyseTypes) tp1 <:< tp2
         else {
@@ -758,15 +773,11 @@ class BuildCallGraph extends Phase {
 
         val casted = if (mode < AnalyseTypes) Nil else
           for (tp <- types;
-            cast <- casts.reachableItems.toSet
-            if filterTypes(tp.tp, cast.from) && filterTypes(cast.to, recieverType);
+            cast <- tp.castsCache
+            if /*filterTypes(tp.tp, cast.from) &&*/ filterTypes(cast.to, recieverType);
             alt <- tp.tp.member(calleeSymbol.name).altsWith(p => p.matches(calleeSymbol.asSeenFrom(tp.tp)))
             if alt.exists && {
               // this additionaly introduces a cast of result type and argument types
-
-              def addCast(from: Type, to: Type) =
-                if (!(from <:< to))
-                  casts += new Cast(from, to)
 
               val uncastedSig = tp.tp.select(alt.symbol).appliedTo(targs).widen
               val castedSig = recieverType.select(calleeSymbol).appliedTo(targs).widen
@@ -787,7 +798,7 @@ class BuildCallGraph extends Phase {
         case _ if calleeSymbol == ctx.definitions.Any_asInstanceOf =>
           val from = propagateTargs(receiver)
           val to = propagateTargs(targs.head)
-          casts += new Cast(from, to)
+          addCast(from, to)
           Nil
         case NoPrefix =>  // inner method
           assert(callee.call.termSymbol.owner.is(Method) || callee.call.termSymbol.owner.isLocalDummy)
@@ -880,6 +891,9 @@ class BuildCallGraph extends Phase {
       println(s"\t Found ${reachableMethods.size} new call sites: ${reachableMethods.newItems.toString().take(60)}")
 
     }
+
+    val endTime = java.lang.System.currentTimeMillis()
+    println("++++++++++ finished in " + (endTime - startTime)/1000.0  +" seconds. ++++++++++ ")
 
     val reachableClasses = reachableMethods.reachableItems.map(_.call.termSymbol.maybeOwner.info.widen.classSymbol)
     val reachableDefs = reachableMethods.reachableItems.map(_.call.termSymbol)
