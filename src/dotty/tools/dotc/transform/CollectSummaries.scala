@@ -21,7 +21,7 @@ import dotty.tools.dotc.core.Constants.Constant
 import dotty.tools.dotc.core.tasty.DottyUnpickler.TreeSectionUnpickler
 import dotty.tools.dotc.core.tasty.TastyName.Table
 import dotty.tools.dotc.core.tasty.TastyUnpickler.SectionUnpickler
-import dotty.tools.dotc.core.{ClassfileLoader, TypeErasure, Flags}
+import dotty.tools.dotc.core.{Hashable, ClassfileLoader, TypeErasure, Flags}
 import dotty.tools.dotc.core.Phases.Phase
 import dotty.tools.dotc.core.tasty._
 import dotty.tools.dotc.transform.CollectSummaries.{SubstituteByParentMap}
@@ -456,7 +456,19 @@ object Summaries {
   val version: Int = 1
   val sectionName = "$ummaries"
 
-   class PreciseType(u: Type) extends UncachedProxyType {
+   class PreciseType(u: Type) extends SingletonType {
+
+     /** customized hash code of this type.
+       * NotCached for uncached types. Cached types
+       * compute hash and use it as the type's hashCode.
+       */
+     def hash: Int = {
+       val underlying = u.hash
+       if (underlying == Hashable.NotCached) Hashable.NotCached
+       else if (underlying == Hashable.NotCached - 1) underlying
+       else underlying + 1
+     }
+
      def underlying(implicit ctx: Context): Type = u
    }
 
