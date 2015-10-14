@@ -723,7 +723,7 @@ class BuildCallGraph extends Phase {
             }
             refinedConstructedType
           } else tp.widenDealias
-          new SubstituteByParentMap(outerTargs).apply(refinedClassType)
+          substitution.apply(refinedClassType)
         } else tp
       }
 
@@ -949,7 +949,7 @@ class BuildCallGraph extends Phase {
     outGraph.append(s"digraph Gr${mode}_$specLimit {\n")
     outGraph.append("graph [fontsize=10 fontname=\"Verdana\" compound=true];\n")
     outGraph.append("label = \""+reachableMethods.reachableItems.size + " nodes, "
-      + reachableMethods.reachableItems.foldLeft(0)(_ + _.outEdges.values.foldLeft(0)(_ + _.size)) +" edges\";")
+      + reachableMethods.reachableItems.foldLeft(0)(_ + _.outEdges.values.foldLeft(0)(_ + _.size)) +" edges, "+ reachableTypes.reachableItems.size  +" reachable types\";")
 
     val slash = '"'
 
@@ -964,8 +964,12 @@ class BuildCallGraph extends Phase {
       }
     }
 
-    def csWTToName(x: CallWithContext, close: Boolean = true, open: Boolean = true) = {
-      s"${if (open) slash else ""}${x.call.termSymbol.showFullName}${if (x.targs.nonEmpty)"[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
+    def csWTToName(x: CallWithContext, close: Boolean = true, open: Boolean = true): String = {
+      if (x.call.termSymbol.owner == x.call.normalizedPrefix.classSymbol) {
+        s"${if (open) slash else ""}${x.call.termSymbol.showFullName}${if (x.targs.nonEmpty) "[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
+      } else {
+        s"${if (open) slash else ""}${x.call.normalizedPrefix.show}.super.${x.call.termSymbol.showFullName}${if (x.targs.nonEmpty) "[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
+      }
     }
 
     def csToName(parrent: CallWithContext, inner: CallInfo): String = {
@@ -976,8 +980,13 @@ class BuildCallGraph extends Phase {
       csWTToName(x, close=false) + "_Dummy\""
     }
 
-    def clusterName(x: CallWithContext) =
-      "\"cluster_" + csWTToName(x, open=false)
+    def clusterName(x: CallWithContext) = {
+     val r =  "\"cluster_" + csWTToName(x, open = false)
+      if (r.contains("BufferLike.apply")) {
+        println("doba")
+      }
+      r
+    }
 
     // add names and subraphs
     reachableMethods.reachableItems.foreach { caller =>
