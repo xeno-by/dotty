@@ -825,13 +825,13 @@ class BuildCallGraph extends Phase {
       }
 
       receiver match {
-        case _ if defn.ObjectMethods.contains(calleeSymbol) =>
-          // TODO: only for paper
-          Nil
         case _ if calleeSymbol == ctx.definitions.Any_asInstanceOf =>
           val from = propagateTargs(receiver)
           val to = propagateTargs(targs.head)
           addCast(from, to)
+          Nil
+        case _ if defn.ObjectMethods.contains(calleeSymbol) || defn.AnyMethods.contains(calleeSymbol) =>
+          // TODO: only for paper
           Nil
         case NoPrefix =>  // inner method
           assert(callee.call.termSymbol.owner.is(Method) || callee.call.termSymbol.owner.isLocalDummy)
