@@ -624,9 +624,8 @@ class BuildCallGraph extends Phase {
     def addReachableType(x: TypeWithContext): Unit = {
       if (!reachableTypes.reachableItems.contains(x)) {
         reachableTypes += x
-        val existingNames = scala.collection.JavaConversions.asScalaSet(typesByMemberNameCache.keySet())
-        for (name <- existingNames) {
-          if (x.tp.member(name).exists)
+        val namesInType = x.tp.memberNames(takeAllFilter).filter(typesByMemberNameCache.containsKey)
+        for (name <- namesInType) {
             typesByMemberNameCache.put(name, typesByMemberNameCache.get(name) + x)
         }
       }
