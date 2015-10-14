@@ -699,21 +699,22 @@ class BuildCallGraph extends Phase {
           OuterTargs.empty
       }
 
+      lazy val outerParent = if (callerSymbol.owner ne caller.call.normalizedPrefix.classSymbol) {
+        val current = caller.call.normalizedPrefix
+        val superTpe = callerSymbol.owner.info
+        val outers = current.typeMembers.foldLeft(OuterTargs.empty) { (outerTargs: OuterTargs, x) =>
+          val old = superTpe.member(x.symbol.name)
+          if (old.exists) outerTargs + (callerSymbol.owner, x.symbol.name, x.info) else outerTargs
+        }
+        outers
+      } else OuterTargs.empty
+
+      lazy val outerPropagetedTargs = caller.outerTargs ++ tpamsOuter ++ outerParent
+      lazy val substitution = new SubstituteByParentMap(outerPropagetedTargs)
+
       def propagateTargs(tp: Type, isConstructor: Boolean = false): Type = {
         if (mode >= AnalyseTypes && (caller.targs.nonEmpty || caller.outerTargs.nonEmpty || (callerSymbol.owner ne caller.call.normalizedPrefix.classSymbol))) {
           /* && tp.widenDealias.existsPart{x => val t = x.typeSymbol; t.exists && (t.owner == callerSymbol || caller.outerTargs.contains(t.owner))}*/
-          val outerParent = if (callerSymbol.owner ne caller.call.normalizedPrefix.classSymbol) {
-            val current = caller.call.normalizedPrefix
-            val superTpe = callerSymbol.owner.info
-            val outers = current.typeMembers.foldLeft(OuterTargs.empty) { (outerTargs: OuterTargs, x) =>
-              val old = superTpe.member(x.symbol.name)
-              if (old.exists) outerTargs + (callerSymbol.owner, x.symbol.name, x.info) else outerTargs
-            }
-            outers
-          } else OuterTargs.empty
-
-          val outerTargs = caller.outerTargs ++ tpamsOuter ++ outerParent
-          val substitution = new SubstituteByParentMap(outerTargs)
 
           val refinedClassType = if (isConstructor) {
             val refinedConstructedType = tp.typeMembers.foldLeft(tp){(acc, memberType) =>
