@@ -610,6 +610,27 @@ class BuildCallGraph extends Phase {
     val reachableTypes = new Worklist[TypeWithContext]()
     val casts = new Worklist[Cast]()
     val outerMethod = mutable.Set[Symbol]()
+    val typesByMemberNameCache = new java.util.IdentityHashMap[Name, Set[TypeWithContext]]()
+
+    def getTypesByMemberName(x: Name): Set[TypeWithContext] = {
+      val ret1 = typesByMemberNameCache.get(x)
+      if (ret1 eq null) {
+        // not yet computed
+        val upd = reachableTypes.reachableItems.filter(tp => tp.tp.member(x).exists).toSet
+        typesByMemberNameCache.put(x, upd)
+        upd
+      } else ret1
+    }
+    def addReachableType(x: TypeWithContext): Unit = {
+      if (!reachableTypes.reachableItems.contains(x)) {
+        reachableTypes += x
+        val existingNames = scala.collection.JavaConversions.asScalaSet(typesByMemberNameCache.keySet())
+        for (name <- existingNames) {
+          if (x.tp.member(name).exists)
+            typesByMemberNameCache.put(name, typesByMemberNameCache.get(name) + x)
+        }
+      }
+    }
     // val callSites = new Worklist[CallInfo]()
 
 
@@ -625,7 +646,7 @@ class BuildCallGraph extends Phase {
       val call = new CallWithContext(tpe, (0 until targs).map(x => new ErazedType()).toList, ctx.definitions.ArrayType(ctx.definitions.StringType) :: Nil, OuterTargs.empty)
       reachableMethods += call
       val t = regularizeType(ref(s.owner).tpe)
-      reachableTypes += new TypeWithContext(t, parentRefinements(t))
+      addReachableType(new TypeWithContext(t, parentRefinements(t)))
     }
 
     collectedSummaries.values.foreach(x => if(isEntryPoint(x.methodDef)) pushEntryPoint(x.methodDef))
@@ -657,7 +678,7 @@ class BuildCallGraph extends Phase {
           // reachableTypes += regularizeType(ref(tp1.termSymbol).tpe)
         } else if (tp1.typeSymbol.is(Flags.Module)) {
           val t = regularizeType(ref(tp1.typeSymbol).tpe)
-          reachableTypes += new TypeWithContext(t, parentRefinements(t))
+          addReachableType(new TypeWithContext(t, parentRefinements(t)))
         }
         tp1 = tp1.normalizedPrefix
       }
@@ -721,7 +742,7 @@ class BuildCallGraph extends Phase {
       val args = callee.argumentsPassed.map {
         case x if x.isRepeatedParam =>
           val t = regularizeType(propagateTargs(x.translateParameterized(defn.RepeatedParamClass, ctx.requiredClass("scala.collection.mutable.WrappedArray"))))
-          reachableTypes += new TypeWithContext(t, parentRefinements(t))
+          addReachableType(new TypeWithContext(t, parentRefinements(t)))
           t
         case x if mode < AnalyseArgs =>
           ref(Summaries.simplifiedClassOf(x)).tpe
@@ -764,7 +785,7 @@ class BuildCallGraph extends Phase {
       def dispatchCalls(recieverType: Type): Traversable[CallWithContext] = {
         // without casts
         val dirrect =
-          for (tp <- types
+          for (tp <- getTypesByMemberName(calleeSymbol.name)
              if filterTypes(tp.tp, recieverType);
              alt <- tp.tp.member(calleeSymbol.name).altsWith(p => p.matches(calleeSymbol.asSeenFrom(tp.tp)))
              if alt.exists
@@ -772,7 +793,7 @@ class BuildCallGraph extends Phase {
           yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs)
 
         val casted = if (mode < AnalyseTypes) Nil else
-          for (tp <- types;
+          for (tp <- getTypesByMemberName(calleeSymbol.name);
             cast <- tp.castsCache
             if /*filterTypes(tp.tp, cast.from) &&*/ filterTypes(cast.to, recieverType);
             alt <- tp.tp.member(calleeSymbol.name).altsWith(p => p.matches(calleeSymbol.asSeenFrom(tp.tp)))
@@ -807,7 +828,7 @@ class BuildCallGraph extends Phase {
         case t if calleeSymbol.isPrimaryConstructor =>
 
           val tpe =  regularizeType(propagateTargs(callee.call.appliedTo(targs).widen.resultType, isConstructor = true))
-          reachableTypes += new TypeWithContext(tpe, parentRefinements(tpe) ++ outerTargs)
+          addReachableType(new TypeWithContext(tpe, parentRefinements(tpe) ++ outerTargs))
 
           new CallWithContext(propagateTargs(receiver).select(calleeSymbol), targs, args, outerTargs) :: Nil
 
@@ -858,7 +879,7 @@ class BuildCallGraph extends Phase {
 
           if (summary.isDefined) {
 
-            reachableTypes ++= summary.get.accessedModules.map(x => new TypeWithContext(regularizeType(x.info), parentRefinements(x.info)))
+            summary.get.accessedModules.map(x => new TypeWithContext(regularizeType(x.info), parentRefinements(x.info))).foreach(addReachableType)
 
             summary.get.methodsCalled.flatMap { x =>
               val reciever = x._1
