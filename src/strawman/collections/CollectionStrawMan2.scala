@@ -221,13 +221,13 @@ object CollectionStrawMan1 {
   implicit class ViewMonoTransforms[A](val v: View[A])
   extends AnyVal with MonoTransforms[A, View[A]] {
     protected def iter = v.iterator
-    protected def fromIter(it: => Iterator[A]): View[A] = it
+    protected def fromIter(it: => Iterator[A]): View[A] = it _
   }
 
   implicit class ViewPolyTransforms[A](val v: View[A])
   extends AnyVal with PolyTransforms[A, View] {
     protected def iter = v.iterator
-    protected def fromIter[B](it: => Iterator[B]) = it
+    protected def fromIter[B](it: => Iterator[B]) = it _
   }
 
   /** Concrete collection type: String */
