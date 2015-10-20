@@ -26,6 +26,8 @@ trait LinearSeqOptimized[+A, +Repr <: LinearSeqOptimized[A, Repr]] extends Linea
 
   def tail: Repr
 
+  override def size = length
+
   /** The length of the $coll.
    *
    *  $willNotTerminateInf

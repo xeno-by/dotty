@@ -170,12 +170,12 @@ self =>
    *  @return An iterator producing ${coll}s of size `size`, except the
    *          last will be less than size `size` if the elements don't divide evenly.
    */
-  def grouped(size: Int): Iterator[Repr] =
+  def grouped(size: Int): Iterator[Repr] = ???/*
     for (xs <- iterator grouped size) yield {
       val b = newBuilder
       b ++= xs
       b.result()
-    }
+    }     */
 
   /** Groups elements in fixed size blocks by passing a "sliding window"
    *  over them (as opposed to partitioning them, as is done in grouped.)
@@ -199,12 +199,12 @@ self =>
    *          last and the only element will be truncated if there are
    *          fewer elements than size.
    */
-  def sliding(size: Int, step: Int): Iterator[Repr] =
+  def sliding(size: Int, step: Int): Iterator[Repr] = ??? /*
     for (xs <- iterator.sliding(size, step)) yield {
       val b = newBuilder
       b ++= xs
       b.result()
-    }
+    }   */
 
   /** Selects last ''n'' elements.
    *  $orderDependent
