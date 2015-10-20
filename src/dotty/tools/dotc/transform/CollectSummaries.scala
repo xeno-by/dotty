@@ -312,7 +312,17 @@ class CollectSummaries extends MiniPhase { thisTransform =>
 
       assert(storedReciever.exists)
 
-      val args: List[Type] = arguments.flatten.map(x =>  x match {
+      def skipBlocks(s: Tree): Tree = {
+        s match {
+          case s: Block => skipBlocks(s.expr)
+          case _ => s
+        }
+      }
+
+      val args: List[Type] = arguments.flatten.map(x =>  skipBlocks(x) match {
+        case exp: Closure =>
+          val SAMType(e) =  exp.tpe
+          new ClosureType(exp, x.tpe, e.symbol)
         case Select(New(tp),_) => new PreciseType(tp.tpe)
         case Apply(Select(New(tp), _), args) => new PreciseType(tp.tpe)
         case Apply(TypeApply(Select(New(tp), _), targs), args) => new PreciseType(tp.tpe)
@@ -335,7 +345,8 @@ class CollectSummaries extends MiniPhase { thisTransform =>
         case TermRef(prefix: ThisType, name) =>
           Some(tpd.This(prefix.cls).select(tree.symbol))
         case TermRef(NoPrefix, name) =>
-          if (tree.symbol is Flags.Method) Some(This(tree.symbol.topLevelClass.asClass).select(tree.symbol)) // workaround #342 todo: remove after fixed
+          if (tree.symbol is Flags.Method) // todo: this kills dotty
+            Some(This(tree.symbol.topLevelClass.asClass).select(tree.symbol)) // workaround #342 todo: remove after fixed
           else None
         case _ => None
       }
@@ -456,6 +467,28 @@ object Summaries {
   val version: Int = 1
   val sectionName = "$ummaries"
 
+
+   class ClosureType(val meth: tpd.Closure, val u: Type, val implementedMethod: Symbol) extends SingletonType {
+     /** The type to which this proxy forwards operations. */
+     def underlying(implicit ctx: Context): Type = u
+
+     /** customized hash code of this type.
+       * NotCached for uncached types. Cached types
+       * compute hash and use it as the type's hashCode.
+       */
+     def hash: Int = implementedMethod.hashCode()
+
+
+     override def equals(other: Any): Boolean = other match {
+       case that: ClosureType =>
+           meth == that.meth &&
+           u == that.u &&
+           implementedMethod == that.implementedMethod
+       case _ => false
+     }
+
+   }
+
    class PreciseType(u: Type) extends SingletonType {
 
      /** customized hash code of this type.
@@ -552,6 +585,7 @@ object Summaries {
   case class MethodSummary(methodDef: Symbol,
                            var thisAccessed: Boolean,
                            methodsCalled: mutable.Map[Type, List[CallInfo]],
+                           // allocatedLambdas
                            var accessedModules: List[Symbol],
                            argumentReturned: Byte, // -1 if not known
                            var argumentStoredToHeap: List[Boolean] // not currently collected
@@ -723,7 +757,17 @@ class BuildCallGraph extends Phase {
       lazy val outerPropagetedTargs = caller.outerTargs ++ tpamsOuter ++ outerParent
       lazy val substitution = new SubstituteByParentMap(outerPropagetedTargs)
 
-      def propagateTargs(tp: Type, isConstructor: Boolean = false): Type = {
+      def propagateArgs(tp: Type): Type = {
+        tp match {
+          case x: TermRef if mode >= AnalyseArgs && x.symbol.is(Param) && x.symbol.owner == caller.call.termSymbol =>
+            val id = caller.call.termSymbol.info.paramNamess.flatten.indexWhere(_ == x.symbol.name)
+            caller.argumentsPassed(id)
+          case t => t
+        }
+      }
+
+      def propagateTargs(tp0: Type, isConstructor: Boolean = false): Type = {
+        val tp = propagateArgs(tp0)
         if (mode >= AnalyseTypes && (caller.targs.nonEmpty || caller.outerTargs.nonEmpty || (callerSymbol.owner ne caller.call.normalizedPrefix.classSymbol))) {
           /* && tp.widenDealias.existsPart{x => val t = x.typeSymbol; t.exists && (t.owner == callerSymbol || caller.outerTargs.contains(t.owner))}*/
 
@@ -739,7 +783,14 @@ class BuildCallGraph extends Phase {
         } else tp
       }
 
-
+      val outerTargs: OuterTargs =
+        if (mode < AnalyseTypes) OuterTargs.empty
+        else if (calleeSymbol.isProperlyContainedIn(callerSymbol)) {
+          caller.outerTargs ++ tpamsOuter
+        } else {
+          new OuterTargs(caller.outerTargs.mp.filter(x => calleeSymbol.isProperlyContainedIn(x._1)))
+          // todo: Is AsSeenFrom ever needed for outerTags?
+        }
 
       // if typearg of callee is a typeparam of caller, propagate typearg from caller to callee
       lazy val targs = callee.targs map {
@@ -758,20 +809,17 @@ class BuildCallGraph extends Phase {
           t
         case x if mode < AnalyseArgs =>
           ref(Summaries.simplifiedClassOf(x)).tpe
-        case x: TermRef if x.symbol.is(Param) && x.symbol.owner == caller.call.termSymbol =>
+        case x: PreciseType =>
+          x
+        case x: ClosureType =>
+          val utpe =  regularizeType(propagateTargs(x.underlying, isConstructor = true))
+          addReachableType(new TypeWithContext(new ClosureType(x.meth, utpe, x.implementedMethod), parentRefinements(utpe) ++ outerTargs))
+          x
+        case x: TermRef if x.symbol.is(Param) && x.symbol.owner == caller.call.termSymbol =>  // todo: we could also handle outer arguments
           val id = caller.call.termSymbol.info.paramNamess.flatten.indexWhere(_ == x.symbol.name)
           caller.argumentsPassed(id)
         case x => propagateTargs(x)
       }
-
-      val outerTargs: OuterTargs =
-        if (mode < AnalyseTypes) OuterTargs.empty
-        else if (calleeSymbol.isProperlyContainedIn(callerSymbol)) {
-          caller.outerTargs ++ tpamsOuter
-        } else {
-          new OuterTargs(caller.outerTargs.mp.filter(x => calleeSymbol.isProperlyContainedIn(x._1)))
-          // todo: Is AsSeenFrom ever needed for outerTags?
-        }
 
       def addCast(from: Type, to: Type) =
         if (!(from <:< to)) {
@@ -795,33 +843,41 @@ class BuildCallGraph extends Phase {
         }
       }
       def dispatchCalls(recieverType: Type): Traversable[CallWithContext] = {
-        // without casts
-        val dirrect =
-          for (tp <- getTypesByMemberName(calleeSymbol.name)
-             if filterTypes(tp.tp, recieverType);
-             alt <- tp.tp.member(calleeSymbol.name).altsWith(p => p.matches(calleeSymbol.asSeenFrom(tp.tp)))
-             if alt.exists
-        )
-          yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs)
+        recieverType match {
+          case t: PreciseType =>
+            new CallWithContext(t.underlying.select(calleeSymbol.name), targs, args, outerTargs) :: Nil
+          case t: ClosureType if (calleeSymbol.name eq t.implementedMethod.name) =>
+            new CallWithContext(t.underlying.select(t.meth.meth.symbol), targs, t.meth.env.map(_.tpe) ++ args, outerTargs) :: Nil
+          case _ =>
+            // without casts
+            val dirrect =
+              for (tp <- getTypesByMemberName(calleeSymbol.name)
+                   if filterTypes(tp.tp, recieverType);
+                   alt <- tp.tp.member(calleeSymbol.name).altsWith(p => p.matches(calleeSymbol.asSeenFrom(tp.tp)))
+                   if alt.exists
+              )
+                yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs)
 
-        val casted = if (mode < AnalyseTypes) Nil else
-          for (tp <- getTypesByMemberName(calleeSymbol.name);
-            cast <- tp.castsCache
-            if /*filterTypes(tp.tp, cast.from) &&*/ filterTypes(cast.to, recieverType);
-            alt <- tp.tp.member(calleeSymbol.name).altsWith(p => p.matches(calleeSymbol.asSeenFrom(tp.tp)))
-            if alt.exists && {
-              // this additionaly introduces a cast of result type and argument types
+            val casted = if (mode < AnalyseTypes) Nil
+            else
+              for (tp <- getTypesByMemberName(calleeSymbol.name);
+                   cast <- tp.castsCache
+                   if /*filterTypes(tp.tp, cast.from) &&*/ filterTypes(cast.to, recieverType);
+                   alt <- tp.tp.member(calleeSymbol.name).altsWith(p => p.matches(calleeSymbol.asSeenFrom(tp.tp)))
+                   if alt.exists && {
+                     // this additionaly introduces a cast of result type and argument types
 
-              val uncastedSig = tp.tp.select(alt.symbol).appliedTo(targs).widen
-              val castedSig = recieverType.select(calleeSymbol).appliedTo(targs).widen
-              (uncastedSig.paramTypess.flatten zip castedSig.paramTypess.flatten) foreach (x => addCast(x._2, x._1))
-              addCast(uncastedSig.finalResultType, castedSig.finalResultType)
+                     val uncastedSig = tp.tp.select(alt.symbol).appliedTo(targs).widen
+                     val castedSig = recieverType.select(calleeSymbol).appliedTo(targs).widen
+                     (uncastedSig.paramTypess.flatten zip castedSig.paramTypess.flatten) foreach (x => addCast(x._2, x._1))
+                     addCast(uncastedSig.finalResultType, castedSig.finalResultType)
 
-              true
-            })
-        yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs)
+                     true
+                   })
+                yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs)
 
-        dirrect ++ casted
+            dirrect ++ casted
+        }
       }
 
       receiver match {
@@ -884,8 +940,14 @@ class BuildCallGraph extends Phase {
        /* case thisType: ThisType =>
           // todo: handle calls on this of outer classes
           dispatchCalls(caller.call.normalizedPrefix)*/
-        case t =>
-          dispatchCalls(propagateTargs(t.widenDealias))
+        case _: PreciseType =>
+          dispatchCalls(propagateTargs(receiver))
+        case _: ClosureType =>
+          dispatchCalls(propagateTargs(receiver))
+        case x: TermRef if x.symbol.is(Param) && x.symbol.owner == caller.call.termSymbol =>
+          dispatchCalls(propagateTargs(receiver))
+        case _ =>
+          dispatchCalls(propagateTargs(receiver.widenDealias))
       }
     }
 
@@ -1074,7 +1136,7 @@ class BuildCallGraph extends Phase {
       println(s"\n\t\t\tType & Arg flow analisys")
       val g3 = buildCallGraph(AnalyseArgs, specLimit)
 
-      def printToFile(f: java.io.File)(op: java.io.PrintWriter => Unit) {
+      def printToFile(f: java.io.File)(op: java.io.PrintWriter => Unit): Unit = {
         val p = new java.io.PrintWriter(f)
         try { op(p) } finally { p.close() }
       }
