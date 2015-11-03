@@ -322,7 +322,7 @@ class CollectSummaries extends MiniPhase { thisTransform =>
       val args: List[Type] = arguments.flatten.map(x =>  skipBlocks(x) match {
         case exp: Closure =>
           val SAMType(e) =  exp.tpe
-          new ClosureType(exp, x.tpe, e.symbol)
+          new ClosureType(exp, x.tpe, e.symbol, null.asInstanceOf[OuterTargs])
         case Select(New(tp),_) => new PreciseType(tp.tpe)
         case Apply(Select(New(tp), _), args) => new PreciseType(tp.tpe)
         case Apply(TypeApply(Select(New(tp), _), targs), args) => new PreciseType(tp.tpe)
@@ -468,7 +468,7 @@ object Summaries {
   val sectionName = "$ummaries"
 
 
-   class ClosureType(val meth: tpd.Closure, val u: Type, val implementedMethod: Symbol) extends SingletonType {
+   class ClosureType(val meth: tpd.Closure, val u: Type, val implementedMethod: Symbol, val outerTargs: OuterTargs)(implicit ctx: Context) extends SingletonType {
      /** The type to which this proxy forwards operations. */
      def underlying(implicit ctx: Context): Type = u
 
@@ -816,8 +816,10 @@ class BuildCallGraph extends Phase {
           x
         case x: ClosureType =>
           val utpe =  regularizeType(propagateTargs(x.underlying, isConstructor = true))
-          addReachableType(new TypeWithContext(new ClosureType(x.meth, utpe, x.implementedMethod), parentRefinements(utpe) ++ outerTargs))
-          x
+          val outer = parentRefinements(utpe) ++ outerTargs
+          val closureT = new ClosureType(x.meth, utpe, x.implementedMethod, outer)
+          addReachableType(new TypeWithContext(closureT, outer))
+          closureT
         case x: TermRef if x.symbol.is(Param) && x.symbol.owner == caller.call.termSymbol =>  // todo: we could also handle outer arguments
           val id = caller.call.termSymbol.info.paramNamess.flatten.indexWhere(_ == x.symbol.name)
           caller.argumentsPassed(id)
@@ -850,7 +852,7 @@ class BuildCallGraph extends Phase {
           case t: PreciseType =>
             new CallWithContext(t.underlying.select(calleeSymbol.name), targs, args, outerTargs) :: Nil
           case t: ClosureType if (calleeSymbol.name eq t.implementedMethod.name) =>
-            new CallWithContext(t.underlying.select(t.meth.meth.symbol), targs, t.meth.env.map(_.tpe) ++ args, outerTargs) :: Nil
+            new CallWithContext(t.underlying.select(t.meth.meth.symbol), targs, t.meth.env.map(_.tpe) ++ args, outerTargs ++ t.outerTargs, caller) :: Nil
           case _ =>
             // without casts
             val dirrect =
