@@ -785,7 +785,8 @@ class BuildCallGraph extends Phase {
               else acc
             }
             refinedConstructedType
-          } else tp.widenDealias
+          } else if (mode >= AnalyseArgs && (tp.isInstanceOf[PreciseType] || tp.isInstanceOf[ClosureType])) tp
+            else tp.widenDealias
           substitution.apply(refinedClassType)
         } else tp
       }
