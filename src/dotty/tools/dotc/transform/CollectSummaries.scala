@@ -545,9 +545,13 @@ object Summaries {
     def empty = new OuterTargs(Map.empty)
   }
 
-  class CallWithContext(call: Type, targs: List[Type], argumentsPassed: List[Type], val outerTargs: OuterTargs) extends CallInfo(call, targs, argumentsPassed) {
+  var nextCallId  = 0
 
+  class CallWithContext(call: Type, targs: List[Type], argumentsPassed: List[Type], val outerTargs: OuterTargs, parent: CallWithContext) extends CallInfo(call, targs, argumentsPassed) {
 
+    val id = { nextCallId += 1; nextCallId}
+    if (id == 9534)
+      println("dsds")
     val outEdges = mutable.HashMap[CallInfo, List[CallWithContext]]().withDefault(x => Nil)
 
     override def hashCode(): Int = super.hashCode() ^ outerTargs.hashCode()
@@ -691,7 +695,7 @@ class BuildCallGraph extends Phase {
         case t: PolyType => t.paramNames.size
         case _ => 0
       }
-      val call = new CallWithContext(tpe, (0 until targs).map(x => new ErazedType()).toList, ctx.definitions.ArrayType(ctx.definitions.StringType) :: Nil, OuterTargs.empty)
+      val call = new CallWithContext(tpe, (0 until targs).map(x => new ErazedType()).toList, ctx.definitions.ArrayType(ctx.definitions.StringType) :: Nil, OuterTargs.empty, null)
       reachableMethods += call
       val t = regularizeType(ref(s.owner).tpe)
       addReachableType(new TypeWithContext(t, parentRefinements(t)))
@@ -850,7 +854,7 @@ class BuildCallGraph extends Phase {
       def dispatchCalls(recieverType: Type): Traversable[CallWithContext] = {
         recieverType match {
           case t: PreciseType =>
-            new CallWithContext(t.underlying.select(calleeSymbol.name), targs, args, outerTargs) :: Nil
+            new CallWithContext(t.underlying.select(calleeSymbol.name), targs, args, outerTargs, caller) :: Nil
           case t: ClosureType if (calleeSymbol.name eq t.implementedMethod.name) =>
             new CallWithContext(t.underlying.select(t.meth.meth.symbol), targs, t.meth.env.map(_.tpe) ++ args, outerTargs ++ t.outerTargs, caller) :: Nil
           case _ =>
@@ -861,7 +865,7 @@ class BuildCallGraph extends Phase {
                    alt <- tp.tp.member(calleeSymbol.name).altsWith(p => p.matches(calleeSymbol.asSeenFrom(tp.tp)))
                    if alt.exists
               )
-                yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs)
+                yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs, caller)
 
             val casted = if (mode < AnalyseTypes) Nil
             else
@@ -879,7 +883,7 @@ class BuildCallGraph extends Phase {
 
                      true
                    })
-                yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs)
+                yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs, caller)
 
             dirrect ++ casted
         }
@@ -896,14 +900,14 @@ class BuildCallGraph extends Phase {
           Nil
         case NoPrefix =>  // inner method
           assert(callee.call.termSymbol.owner.is(Method) || callee.call.termSymbol.owner.isLocalDummy)
-          new CallWithContext(callee.call, targs, args, outerTargs) :: Nil
+          new CallWithContext(callee.call, targs, args, outerTargs, caller) :: Nil
 
         case t if calleeSymbol.isPrimaryConstructor =>
 
           val tpe =  regularizeType(propagateTargs(callee.call.appliedTo(targs).widen.resultType, isConstructor = true))
           addReachableType(new TypeWithContext(tpe, parentRefinements(tpe) ++ outerTargs))
 
-          new CallWithContext(propagateTargs(receiver).select(calleeSymbol), targs, args, outerTargs) :: Nil
+          new CallWithContext(propagateTargs(receiver).select(calleeSymbol), targs, args, outerTargs, caller) :: Nil
 
           // super call in a class (know target precisely)
         case st: SuperType =>
@@ -915,7 +919,7 @@ class BuildCallGraph extends Phase {
           val targetMethod = targetClass.get.info.member(calleeSymbol.name).altsWith(p => p.signature == calleeSymbol.signature).head
           val thisTpePropagated = propagateTargs(thisTpe)
 
-          new CallWithContext(thisTpePropagated.select(targetMethod.symbol), targs, args, outerTargs) :: Nil
+          new CallWithContext(thisTpePropagated.select(targetMethod.symbol), targs, args, outerTargs, caller) :: Nil
 
           // super call in a trait
         case t if calleeSymbol.is(Flags.SuperAccessor) =>
@@ -937,7 +941,7 @@ class BuildCallGraph extends Phase {
               if (s.nonEmpty) {
                 val parentMethod = ResolveSuper.rebindSuper(x.tp.widenDealias.classSymbol, calleeSymbol)
                 // todo: outerTargs are here defined in terms of location of the subclass. Is this correct?
-                new CallWithContext(t.select(parentMethod), targs, args, outerTargs) :: Nil
+                new CallWithContext(t.select(parentMethod), targs, args, outerTargs, caller) :: Nil
 
               } else Nil
           }
