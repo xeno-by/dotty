@@ -1043,7 +1043,7 @@ class BuildCallGraph extends Phase {
     outGraph.append(s"digraph Gr${mode}_$specLimit {\n")
     outGraph.append("graph [fontsize=10 fontname=\"Verdana\" compound=true];\n")
     outGraph.append("label = \""+reachableMethods.reachableItems.size + " nodes, "
-      + reachableMethods.reachableItems.foldLeft(0)(_ + _.outEdges.values.foldLeft(0)(_ + _.size)) +" edges, "+ reachableTypes.reachableItems.size  +" reachable types\";")
+      + reachableMethods.reachableItems.foldLeft(0)(_ + _.outEdges.values.foldLeft(0)(_ + _.size)) +" edges, "+ reachableTypes.reachableItems.size  +" reachable types\";\n")
 
     val slash = '"'
 
