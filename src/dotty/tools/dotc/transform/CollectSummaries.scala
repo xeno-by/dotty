@@ -476,7 +476,10 @@ object Summaries {
        * NotCached for uncached types. Cached types
        * compute hash and use it as the type's hashCode.
        */
-     def hash: Int = implementedMethod.hashCode()
+     override val hash: Int = implementedMethod.hashCode() + meth.meth.symbol.hashCode()
+
+
+     override def hashCode() = hash
 
 
      override def equals(other: Any): Boolean = other match {
