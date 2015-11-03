@@ -1739,6 +1739,10 @@ object Types {
         withFixedSym(prefix, name, sym)
       else if (sym.defRunId != NoRunId && sym.isCompleted)
         withSig(prefix, name, sym.signature) withSym (sym, sym.signature)
+        // Linker note:
+        // this is problematic, as first method will return a hash-consed refference
+        // that could have symbol already set
+        // ./tests/run/absoverride.scala demonstates this
       else
         all(prefix, name) withSym (sym, Signature.NotAMethod)
 

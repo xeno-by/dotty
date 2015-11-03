@@ -345,8 +345,14 @@ class CollectSummaries extends MiniPhase { thisTransform =>
         case TermRef(prefix: ThisType, name) =>
           Some(tpd.This(prefix.cls).select(tree.symbol))
         case TermRef(NoPrefix, name) =>
-          if (tree.symbol is Flags.Method) // todo: this kills dotty
-            Some(This(tree.symbol.topLevelClass.asClass).select(tree.symbol)) // workaround #342 todo: remove after fixed
+          if (tree.symbol is Flags.Method) { // todo: this kills dotty {
+            val widenedTp = tree.tpe.widen
+            if ((widenedTp.isInstanceOf[MethodicType]) && (!tree.symbol.exists || tree.symbol.info.isInstanceOf[MethodicType]))
+              return tree;
+            registerCall(tree)
+            return tree;
+            // Some(This(tree.symbol.topLevelClass.asClass).select(tree.symbol)) // workaround #342 todo: remove after fixed
+          }
           else None
         case _ => None
       }
