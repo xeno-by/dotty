@@ -863,7 +863,7 @@ class BuildCallGraph extends Phase {
             val dirrect =
               for (tp <- getTypesByMemberName(calleeSymbol.name)
                    if filterTypes(tp.tp, recieverType);
-                   alt <- tp.tp.member(calleeSymbol.name).altsWith(p => p.matches(calleeSymbol.asSeenFrom(tp.tp)))
+                   alt <- tp.tp.member(calleeSymbol.name).altsWith(p => p.asSeenFrom(tp.tp).matches(calleeSymbol.asSeenFrom(tp.tp)))
                    if alt.exists
               )
                 yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs, caller)
