@@ -32,7 +32,7 @@ class tests extends CompilerTest {
 
   val testPickling = List("-Xprint-types", "-Ytest-pickler", "-Ystop-after:pickler")
 
-  val twice = List("#runs", "2")
+  val twice = List()
   val staleSymbolError: List[String] = List()
 
   val allowDeepSubtypes = defaultOptions diff List("-Yno-deep-subtypes")
@@ -105,7 +105,7 @@ class tests extends CompilerTest {
   @Test def pos_variancesConstr = compileFile(posSpecialDir, "variances-constr", scala2mode)
 
   @Test def new_all = compileFiles(newDir, twice)
-
+/*
   @Test def neg_abstractOverride() = compileFile(negDir, "abstract-override", xerrors = 2)
   @Test def neg_blockescapes() = compileFile(negDir, "blockescapesNeg", xerrors = 1)
   @Test def neg_bounds() = compileFile(negDir, "bounds", xerrors = 2)
@@ -168,7 +168,7 @@ class tests extends CompilerTest {
   @Test def neg_implicitLowerBound = compileFile(negDir, "implicit-lower-bound", xerrors = 1)
   @Test def neg_validate = compileFile(negDir, "validate", xerrors = 18)
   @Test def neg_validateParsing = compileFile(negDir, "validate-parsing", xerrors = 7)
-  @Test def neg_validateRefchecks = compileFile(negDir, "validate-refchecks", xerrors = 2)
+  @Test def neg_validateRefchecks = compileFile(negDir, "validate-refchecks", xerrors = 2)*/
 
   @Test def run_all = runFiles(runDir)
 
