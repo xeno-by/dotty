@@ -1188,6 +1188,8 @@ object CollectSummaries {
             case t: TypeAlias =>
               assert(t.underlying.isInstanceOf[TermType])
               t.underlying
+            case t: ClassInfo =>
+              t.typeRef
             case _ =>
               assert(false)
               ???
@@ -1225,8 +1227,10 @@ object CollectSummaries {
 
           // assert(id.isDefined)
           if (id.isDefined) {
-            val t = id.get._2.stripTypeVar
-            apply(termTypeIfNeed(t))
+            val t = termTypeIfNeed(id.get._2.stripTypeVar)
+            if (!(t =:= typ))
+             apply(termTypeIfNeed(t))
+            else t
           } else tp
         case t: TypeRef if (t.prefix.normalizedPrefix eq NoPrefix) =>
           val tmp = apply(t.info)
