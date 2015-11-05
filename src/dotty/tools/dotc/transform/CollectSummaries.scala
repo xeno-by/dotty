@@ -864,7 +864,8 @@ class BuildCallGraph extends Phase {
           case t: PreciseType =>
             new CallWithContext(t.underlying.select(calleeSymbol.name), targs, args, outerTargs, caller) :: Nil
           case t: ClosureType if (calleeSymbol.name eq t.implementedMethod.name) =>
-            new CallWithContext(t.underlying.select(t.meth.meth.symbol), targs, t.meth.env.map(_.tpe) ++ args, outerTargs ++ t.outerTargs, caller) :: Nil
+            val methodSym = t.meth.meth.symbol.asTerm
+            new CallWithContext(TermRef.withFixedSym(t.underlying, methodSym.name,  methodSym), targs, t.meth.env.map(_.tpe) ++ args, outerTargs ++ t.outerTargs, caller) :: Nil
           case _ =>
             // without casts
             val dirrect =
@@ -924,10 +925,11 @@ class BuildCallGraph extends Phase {
           val targetClass = st.supertpe.baseClasses.find(clz =>
             clz.info.decl(calleeSymbol.name).altsWith(p => p.signature == calleeSymbol.signature).nonEmpty
           )
-          val targetMethod = targetClass.get.info.member(calleeSymbol.name).altsWith(p => p.signature == calleeSymbol.signature).head
+          val targetMethod = targetClass.get.info.member(calleeSymbol.name).altsWith(p => p.signature == calleeSymbol.signature).head.symbol.asTerm
           val thisTpePropagated = propagateTargs(thisTpe)
 
-          new CallWithContext(thisTpePropagated.select(targetMethod.symbol), targs, args, outerTargs, caller) :: Nil
+
+          new CallWithContext(TermRef.withFixedSym(thisTpePropagated, targetMethod.name, targetMethod), targs, args, outerTargs, caller) :: Nil
 
           // super call in a trait
         case t if calleeSymbol.is(Flags.SuperAccessor) =>
@@ -947,9 +949,9 @@ class BuildCallGraph extends Phase {
             x =>
               val s = x.tp.baseClasses.dropWhile(_ != prev)
               if (s.nonEmpty) {
-                val parentMethod = ResolveSuper.rebindSuper(x.tp.widenDealias.classSymbol, calleeSymbol)
+                val parentMethod = ResolveSuper.rebindSuper(x.tp.widenDealias.classSymbol, calleeSymbol).asTerm
                 // todo: outerTargs are here defined in terms of location of the subclass. Is this correct?
-                new CallWithContext(t.select(parentMethod), targs, args, outerTargs, caller) :: Nil
+                new CallWithContext(TermRef.withFixedSym(t, parentMethod.name, parentMethod), targs, args, outerTargs, caller) :: Nil
 
               } else Nil
           }
