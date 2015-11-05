@@ -1056,27 +1056,29 @@ class BuildCallGraph extends Phase {
 
     val slash = '"'
 
+    def escape(s: String) = s.replace("\\", "\\\\").replace("\"","\\\"")
+
     def typeName(x: Type): String = {
       x match {
-        case ConstantType(value) => s"$value"
+        case ConstantType(value) => s"${escape(value.toString)}"
         case _ =>
           val t = x.termSymbol.orElse(x.typeSymbol)
           if (t.exists)
-           t.name.toString
-          else x.show
+            escape(t.name.toString)
+          else escape(x.show)
       }
     }
 
     def csWTToName(x: CallWithContext, close: Boolean = true, open: Boolean = true): String = {
       if (x.call.termSymbol.owner == x.call.normalizedPrefix.classSymbol) {
-        s"${if (open) slash else ""}${x.call.termSymbol.showFullName}${if (x.targs.nonEmpty) "[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
+        s"${if (open) slash else ""}${escape(x.call.termSymbol.showFullName)}${if (x.targs.nonEmpty) "[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
       } else {
-        s"${if (open) slash else ""}${x.call.normalizedPrefix.show}.super.${x.call.termSymbol.showFullName}${if (x.targs.nonEmpty) "[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
+        s"${if (open) slash else ""}${escape(x.call.normalizedPrefix.show)}.super.${escape(x.call.termSymbol.showFullName)}${if (x.targs.nonEmpty) "[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
       }
     }
 
     def csToName(parrent: CallWithContext, inner: CallInfo): String = {
-       csWTToName(parrent, close = false) + s"${inner.call.show}${inner.hashCode()}$slash"
+       csWTToName(parrent, close = false) + s"${escape(inner.call.show)}${inner.hashCode()}$slash"
     }
 
     def dummyName(x: CallWithContext) = {
