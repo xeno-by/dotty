@@ -808,7 +808,8 @@ class BuildCallGraph extends Phase {
 
       // if typearg of callee is a typeparam of caller, propagate typearg from caller to callee
       lazy val targs = callee.targs map {
-        case t: TypeVar if mode >= AnalyseTypes && t.stripTypeVar.typeSymbol.owner == caller.call.termSymbol =>
+        case t: TypeVar if mode >= AnalyseTypes && t.stripTypeVar.typeSymbol.maybeOwner == caller.call.termSymbol =>
+          assert(caller.call.termSymbol.exists)
           val abstractSym = callee.targs.head.stripTypeVar.typeSymbol
           val id = caller.call.termSymbol.info.asInstanceOf[PolyType].paramNames.indexOf(abstractSym.name)
           propagateTargs(caller.targs(id).stripTypeVar)
