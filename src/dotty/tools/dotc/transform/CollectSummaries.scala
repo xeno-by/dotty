@@ -702,7 +702,7 @@ class BuildCallGraph extends Phase {
         case t: PolyType => t.paramNames.size
         case _ => 0
       }
-      val call = new CallWithContext(tpe, (0 until targs).map(x => new ErazedType()).toList, ctx.definitions.ArrayType(ctx.definitions.StringType) :: Nil, OuterTargs.empty, null, null)
+      val call = new CallWithContext(tpe, (0 until targs).map(x => new ErazedType()).toList, ctx.definitions.ArrayOf(ctx.definitions.StringType) :: Nil, OuterTargs.empty, null, null)
       reachableMethods += call
       val t = regularizeType(ref(s.owner).tpe)
       addReachableType(new TypeWithContext(t, parentRefinements(t)))

@@ -11,7 +11,7 @@ import scala.reflect.ClassTag
  *
  *  For a test file, see tests/run/CollectionTests.scala.
  */
-object CollectionStrawMan1 {
+object CollectionStrawMan2 {
 
   /* ------------ Base Traits -------------------------------- */
 
