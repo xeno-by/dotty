@@ -553,7 +553,8 @@ object Summaries {
 
   var nextCallId  = 0
 
-  class CallWithContext(call: Type, targs: List[Type], argumentsPassed: List[Type], val outerTargs: OuterTargs, parent: CallWithContext) extends CallInfo(call, targs, argumentsPassed) {
+  class CallWithContext(call: Type, targs: List[Type], argumentsPassed: List[Type], val outerTargs: OuterTargs,
+                        val parent: CallWithContext, val callee: CallInfo) extends CallInfo(call, targs, argumentsPassed) {
 
     val id = { nextCallId += 1; nextCallId}
     if (id == 9534)
@@ -701,7 +702,7 @@ class BuildCallGraph extends Phase {
         case t: PolyType => t.paramNames.size
         case _ => 0
       }
-      val call = new CallWithContext(tpe, (0 until targs).map(x => new ErazedType()).toList, ctx.definitions.ArrayType(ctx.definitions.StringType) :: Nil, OuterTargs.empty, null)
+      val call = new CallWithContext(tpe, (0 until targs).map(x => new ErazedType()).toList, ctx.definitions.ArrayType(ctx.definitions.StringType) :: Nil, OuterTargs.empty, null, null)
       reachableMethods += call
       val t = regularizeType(ref(s.owner).tpe)
       addReachableType(new TypeWithContext(t, parentRefinements(t)))
@@ -862,10 +863,10 @@ class BuildCallGraph extends Phase {
       def dispatchCalls(recieverType: Type): Traversable[CallWithContext] = {
         recieverType match {
           case t: PreciseType =>
-            new CallWithContext(t.underlying.select(calleeSymbol.name), targs, args, outerTargs, caller) :: Nil
+            new CallWithContext(t.underlying.select(calleeSymbol.name), targs, args, outerTargs, caller, callee) :: Nil
           case t: ClosureType if (calleeSymbol.name eq t.implementedMethod.name) =>
             val methodSym = t.meth.meth.symbol.asTerm
-            new CallWithContext(TermRef.withFixedSym(t.underlying, methodSym.name,  methodSym), targs, t.meth.env.map(_.tpe) ++ args, outerTargs ++ t.outerTargs, caller) :: Nil
+            new CallWithContext(TermRef.withFixedSym(t.underlying, methodSym.name,  methodSym), targs, t.meth.env.map(_.tpe) ++ args, outerTargs ++ t.outerTargs, caller, callee) :: Nil
           case _ =>
             // without casts
             val dirrect =
@@ -874,7 +875,7 @@ class BuildCallGraph extends Phase {
                    alt <- tp.tp.member(calleeSymbol.name).altsWith(p => p.asSeenFrom(tp.tp).matches(calleeSymbol.asSeenFrom(tp.tp)))
                    if alt.exists
               )
-                yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs, caller)
+                yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs, caller, callee)
 
             val casted = if (mode < AnalyseTypes) Nil
             else
@@ -892,7 +893,7 @@ class BuildCallGraph extends Phase {
 
                      true
                    })
-                yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs, caller)
+                yield new CallWithContext(tp.tp.select(alt.symbol), targs, args, outerTargs ++ tp.outerTargs, caller, callee)
 
             dirrect ++ casted
         }
@@ -909,14 +910,14 @@ class BuildCallGraph extends Phase {
           Nil
         case NoPrefix =>  // inner method
           assert(callee.call.termSymbol.owner.is(Method) || callee.call.termSymbol.owner.isLocalDummy)
-          new CallWithContext(callee.call, targs, args, outerTargs, caller) :: Nil
+          new CallWithContext(callee.call, targs, args, outerTargs, caller, callee) :: Nil
 
         case t if calleeSymbol.isPrimaryConstructor =>
 
           val tpe =  regularizeType(propagateTargs(callee.call.appliedTo(targs).widen.resultType, isConstructor = true))
           addReachableType(new TypeWithContext(tpe, parentRefinements(tpe) ++ outerTargs))
 
-          new CallWithContext(propagateTargs(receiver).select(calleeSymbol), targs, args, outerTargs, caller) :: Nil
+          new CallWithContext(propagateTargs(receiver).select(calleeSymbol), targs, args, outerTargs, caller, callee) :: Nil
 
           // super call in a class (know target precisely)
         case st: SuperType =>
@@ -929,7 +930,7 @@ class BuildCallGraph extends Phase {
           val thisTpePropagated = propagateTargs(thisTpe)
 
 
-          new CallWithContext(TermRef.withFixedSym(thisTpePropagated, targetMethod.name, targetMethod), targs, args, outerTargs, caller) :: Nil
+          new CallWithContext(TermRef.withFixedSym(thisTpePropagated, targetMethod.name, targetMethod), targs, args, outerTargs, caller, callee) :: Nil
 
           // super call in a trait
         case t if calleeSymbol.is(Flags.SuperAccessor) =>
@@ -951,7 +952,7 @@ class BuildCallGraph extends Phase {
               if (s.nonEmpty) {
                 val parentMethod = ResolveSuper.rebindSuper(x.tp.widenDealias.classSymbol, calleeSymbol).asTerm
                 // todo: outerTargs are here defined in terms of location of the subclass. Is this correct?
-                new CallWithContext(TermRef.withFixedSym(t, parentMethod.name, parentMethod), targs, args, outerTargs, caller) :: Nil
+                new CallWithContext(TermRef.withFixedSym(t, parentMethod.name, parentMethod), targs, args, outerTargs, caller, callee) :: Nil
 
               } else Nil
           }
@@ -1022,6 +1023,14 @@ class BuildCallGraph extends Phase {
     val reachableClasses = reachableMethods.reachableItems.map(_.call.termSymbol.maybeOwner.info.widen.classSymbol)
     val reachableDefs = reachableMethods.reachableItems.map(_.call.termSymbol)
 
+    /*val filter = scala.io.Source.fromFile("trace-filtered").getLines().toList
+    /val filterUnMangled = filter.map(x => x.replace("::", ".").replace("$class", "")).toSet
+
+    def fil(x: Symbol) =
+      filterUnMangled.contains(x.fullName.toString)
+
+    val liveDefs = reachableDefs.filter{x => fil(x)}     */
+
 
     val reachableSpecs: mutable.Set[(Symbol, List[Type])] = reachableMethods.reachableItems.flatMap { x =>
        val clas = x.call.termSymbol.maybeOwner.info.widen.classSymbol
@@ -1040,9 +1049,14 @@ class BuildCallGraph extends Phase {
       }
     }
 
+    val morphisms = reachableMethods.reachableItems.groupBy(x => x.callee).groupBy(x => x._2.map(_.call.termSymbol).toSet.size)
 
+    val mono = if(morphisms.contains(1)) morphisms(1) else Map.empty
+    val bi = if(morphisms.contains(2)) morphisms(2) else Map.empty
+    val mega = morphisms - 1 - 2
 
     println(s"\t Found: ${reachableClasses.size} reachable classes, ${reachableDefs.size} reachable methods, ${reachableSpecs.size} specializations")
+    println(s"\t mono: ${mono.size}, bi: ${bi.size}, mega: ${mega.map(_._2.size).sum}")
     println(s"\t Found ${outerMethod.size} not defined calls: ${outerMethod.map(_.showFullName)}")
     println(s"\t Reachable classes: ${reachableClasses.mkString(", ")}")
     println(s"\t Reachable methods: ${reachableDefs.mkString(", ")}")
