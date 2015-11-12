@@ -1055,6 +1055,7 @@ class BuildCallGraph extends Phase {
     val bi = if(morphisms.contains(2)) morphisms(2) else Map.empty
     val mega = morphisms - 1 - 2
 
+    println(s"\t Method worklist size: ${reachableMethods.reachableItems.size}")
     println(s"\t Found: ${reachableClasses.size} reachable classes, ${reachableDefs.size} reachable methods, ${reachableSpecs.size} specializations")
     println(s"\t mono: ${mono.size}, bi: ${bi.size}, mega: ${mega.map(_._2.size).sum}")
     println(s"\t Found ${outerMethod.size} not defined calls: ${outerMethod.map(_.showFullName)}")
