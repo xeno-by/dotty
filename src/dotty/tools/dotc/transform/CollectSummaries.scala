@@ -1020,7 +1020,8 @@ class BuildCallGraph extends Phase {
     val endTime = java.lang.System.currentTimeMillis()
     println("++++++++++ finished in " + (endTime - startTime)/1000.0  +" seconds. ++++++++++ ")
 
-    val reachableClasses = reachableMethods.reachableItems.map(_.call.termSymbol.maybeOwner.info.widen.classSymbol)
+    val classesWithReachableMethods = reachableMethods.reachableItems.map(_.call.termSymbol.maybeOwner.info.widen.classSymbol)
+    val reachableClasses = classesWithReachableMethods ++ reachableTypes.reachableItems.flatMap(x => x.tp.classSymbols).flatMap(_.baseClasses)
     val reachableDefs = reachableMethods.reachableItems.map(_.call.termSymbol)
 
     /*val filter = scala.io.Source.fromFile("trace-filtered").getLines().toList
@@ -1055,11 +1056,10 @@ class BuildCallGraph extends Phase {
     val bi = if(morphisms.contains(2)) morphisms(2) else Map.empty
     val mega = morphisms - 1 - 2
 
-    println(s"\t Method worklist size: ${reachableMethods.reachableItems.size}")
-    println(s"\t Found: ${reachableClasses.size} reachable classes, ${reachableDefs.size} reachable methods, ${reachableSpecs.size} specializations")
+    println(s"\t Found: ${classesWithReachableMethods.size} classes with reachable methods, ${reachableClasses.size} reachable classes, ${reachableDefs.size} reachable methods, ${reachableSpecs.size} specializations")
     println(s"\t mono: ${mono.size}, bi: ${bi.size}, mega: ${mega.map(_._2.size).sum}")
     println(s"\t Found ${outerMethod.size} not defined calls: ${outerMethod.map(_.showFullName)}")
-    println(s"\t Reachable classes: ${reachableClasses.mkString(", ")}")
+    println(s"\t Reachable classes: ${classesWithReachableMethods.mkString(", ")}")
     println(s"\t Reachable methods: ${reachableDefs.mkString(", ")}")
     println(s"\t Reachable specs: ${reachableSpecs.mkString(", ")}")
 
