@@ -68,7 +68,9 @@ class FrontEnd extends Phase {
     unitContexts foreach (enterSyms(_))
     unitContexts foreach (typeCheck(_))
     record("totalTrees", ast.Trees.ntrees)
-    unitContexts.map(_.compilationUnit).filterNot(discardAfterTyper)
+    val res = unitContexts.map(_.compilationUnit).filterNot(discardAfterTyper)
+    ctx.executors.awaitQuiescence(1, java.util.concurrent.TimeUnit.DAYS)
+    res
   }
 
   override def run(implicit ctx: Context): Unit = {

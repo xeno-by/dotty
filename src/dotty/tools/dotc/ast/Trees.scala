@@ -704,8 +704,9 @@ object Trees {
    *  The contained trees will be integrated when transformed with
    *  a `transform(List[Tree])` call.
    */
-  case class Thicket[-T >: Untyped](trees: List[Tree[T]])
+  case class Thicket[-T >: Untyped](val treesList: List[Tree[T]])
     extends Tree[T] with WithoutTypeOrPos[T] {
+    def trees = treesList
     type ThisTree[-T >: Untyped] = Thicket[T]
     override def isEmpty: Boolean = trees.isEmpty
     override def toList: List[Tree[T]] = flatten(trees)

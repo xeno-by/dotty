@@ -156,7 +156,8 @@ class SymbolLoaders {
       val pre = root.owner.thisType
       root.info = ClassInfo(pre, root.symbol.asClass, Nil, currentDecls, pre select sourceModule)
       if (!sourceModule.isCompleted)
-        sourceModule.completer.complete(sourceModule)
+         sourceModule.completer.complete(sourceModule) // todo: am I sure that this gets executed only by a single thread?
+         //sourceModule.info
       if (!root.isRoot) {
         for (classRep <- classpath.classes)
           if (!maybeModuleClass(classRep))

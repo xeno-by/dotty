@@ -29,6 +29,8 @@ import config.{Settings, ScalaSettings, Platform, JavaPlatform}
 import language.implicitConversions
 import DenotTransformers.DenotTransformer
 
+import scala.collection.concurrent.TrieMap
+
 object Contexts {
 
   /** A context is passed basically everywhere in dotc.
@@ -507,6 +509,29 @@ object Contexts {
 
     /** The platform */
     val platform: Platform = new JavaPlatform
+
+    val executors = new java.util.concurrent.ForkJoinPool()
+
+    def addToWaitList(dependOn: Thread, monitor: Object): Boolean = {
+      val thisThread = Thread.currentThread()
+      def followAliases(cur: Thread): Thread = {
+        val nxt = waitList.getOrElse(cur, null)
+        if ((nxt ne null) && (nxt ne thisThread))
+          followAliases(nxt)
+        else
+          nxt
+      }
+      if (followAliases(dependOn) eq null) {
+        waitList.put(Thread.currentThread(), dependOn)
+        println(s"$thisThread waiting for $dependOn")
+        monitor.synchronized {
+          monitor.wait()
+        }
+        true
+      } else false
+    }
+
+    val waitList = new TrieMap[Thread, Thread]()
 
     /** The loader that loads the members of _root_ */
     def rootLoader(root: TermSymbol)(implicit ctx: Context): SymbolLoader = platform.rootLoader(root)

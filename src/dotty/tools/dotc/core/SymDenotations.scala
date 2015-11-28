@@ -2,6 +2,8 @@ package dotty.tools
 package dotc
 package core
 
+import java.util.concurrent.atomic.AtomicReference
+
 import Periods._, Contexts._, Symbols._, Denotations._, Names._, NameOps._, Annotations._
 import Types._, Flags._, Decorators._, DenotTransformers._, StdNames._, Scopes._
 import NameOps._
@@ -86,6 +88,7 @@ object SymDenotations {
     // ------ Getting and setting fields -----------------------------
 
     private[this] var myFlags: FlagSet = adaptFlags(initFlags)
+    private[this] val initializingThread: AtomicReference[Thread] = new AtomicReference[Thread](null)
     private[this] var myInfo: Type = initInfo
     private[this] var myPrivateWithin: Symbol = initPrivateWithin
     private[this] var myAnnotations: List[Annotation] = Nil
@@ -163,27 +166,52 @@ object SymDenotations {
     }
 
     private def completeFrom(completer: LazyType)(implicit ctx: Context): Unit = {
-      if (completions ne noPrinter) {
-        completions.println(i"${"  " * indent}completing ${if (isType) "type" else "val"} $name")
-        indent += 1
-      }
-      indent += 1
-      if (myFlags is Touched) throw CyclicReference(this)
-      myFlags |= Touched
 
-      // completions.println(s"completing ${this.debugString}")
-      try completer.complete(this)(ctx.withPhase(validFor.firstPhaseId))
-      catch {
-        case ex: CyclicReference =>
-          completions.println(s"error while completing ${this.debugString}")
-          throw ex
-      }
-      finally
-        if (completions ne noPrinter) {
-          indent -= 1
-          completions.println(i"${"  " * indent}completed $name in $owner")
+      // if (myFlags is Touched) throw CyclicReference(this)
+      val touched = myFlags is Touched
+      myFlags |= Touched
+      val curThread = initializingThread.get()
+      if (curThread eq Thread.currentThread())
+        throw CyclicReference(this)
+      if ((curThread ne null)) {
+        val noCycle = ctx.addToWaitList(curThread, this)
+        if (!noCycle) {
+          println("yesCycle")
+          throw CyclicReference(this)
         }
-      // completions.println(s"completed ${this.debugString}")
+        info
+      } else if (initializingThread.compareAndSet(null, Thread.currentThread())) {
+
+        if (completions ne noPrinter) {
+          completions.println(i"${"  " * indent}completing ${if (isType) "type" else "val"} $name")
+          indent += 1
+        }
+        indent += 1
+
+        // completions.println(s"completing ${this.debugString}")
+        this.synchronized {
+          try {
+            completer.complete(this)(ctx.withPhase(validFor.firstPhaseId))
+          }
+          catch {
+            case ex: CyclicReference =>
+              completions.println(s"error while completing ${this.debugString}")
+              throw ex
+          }
+          finally {
+            if (completions ne noPrinter) {
+              indent -= 1
+              completions.println(i"${"  " * indent}completed $name in $owner")
+            }
+            val oldV = initializingThread.get()
+            assert(oldV == Thread.currentThread())
+            initializingThread.set(null)
+
+            this.notifyAll()
+          }
+        }
+        // completions.println(s"completed ${this.debugString}")
+      } else info
     }
 
     protected[dotc] def info_=(tp: Type) = {
@@ -1614,18 +1642,20 @@ object SymDenotations {
       /*>|>*/ ctx.debugTraceIndented(s"$tp.baseTypeRef($this)") /*<|<*/ {
         tp match {
           case tp: CachedType =>
-            checkBasesUpToDate()
-            var basetp = baseTypeRefCache get tp
-            if (basetp == null) {
-              baseTypeRefCache.put(tp, NoPrefix)
-              basetp = computeBaseTypeRefOf(tp)
-              if (isCachable(tp)) baseTypeRefCache.put(tp, basetp)
-              else baseTypeRefCache.remove(tp)
-            } else if (basetp == NoPrefix) {
-              baseTypeRefCache.put(tp, null)
-              throw CyclicReference(this)
+            this.synchronized {
+              checkBasesUpToDate()
+              var basetp = baseTypeRefCache get tp
+              if (basetp == null) {
+                baseTypeRefCache.put(tp, NoPrefix)
+                basetp = computeBaseTypeRefOf(tp)
+                if (isCachable(tp)) baseTypeRefCache.put(tp, basetp)
+                else baseTypeRefCache.remove(tp)
+              } else if (basetp == NoPrefix) {
+                baseTypeRefCache.put(tp, null)
+                throw CyclicReference(this)
+              }
+              basetp
             }
-            basetp
           case _ =>
             computeBaseTypeRefOf(tp)
         }

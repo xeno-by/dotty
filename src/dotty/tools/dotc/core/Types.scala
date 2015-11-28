@@ -3285,7 +3285,9 @@ object Types {
 
   class CyclicReference private (val denot: SymDenotation)
     extends TypeError(s"cyclic reference involving $denot") {
-    def show(implicit ctx: Context) = s"cyclic reference involving ${denot.show}"
+    val thread = Thread.currentThread()
+    val stack = new Exception()
+    def show(implicit ctx: Context) = s"cyclic reference involving ${denot.show} in $thread. Stack: ${stack.getStackTrace.mkString("\n")}"
   }
 
   object CyclicReference {
