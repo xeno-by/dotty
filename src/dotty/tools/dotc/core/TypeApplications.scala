@@ -55,6 +55,8 @@ object TypeApplications {
         case nil =>
           parent
       }
+      assert(variances.nonEmpty)
+      assert(argBoundss.length == variances.length)
       RefinedType(
         argRefinements(defn.LambdaTrait(variances).typeRef, 0, argBoundss),
         tpnme.hkApply, rt => bodyFn(rt).bounds)
@@ -62,7 +64,8 @@ object TypeApplications {
 
     def unapply(tp: Type)(implicit ctx: Context): Option[(List[Int], List[TypeBounds], Type)] = tp match {
       case app @ RefinedType(prefix, tpnme.hkApply) =>
-        val cls = prefix.classSymbol
+        println(s"type lam $tp")
+        val cls = prefix.typeSymbol
         val variances = cls.typeParams.map(_.variance)
         val argBounds = prefix.argInfos.map(_.bounds)
         Some((variances, argBounds, app.refinedInfo))
