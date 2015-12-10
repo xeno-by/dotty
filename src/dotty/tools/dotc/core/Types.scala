@@ -3355,7 +3355,7 @@ object Types {
     }
   }
 
-  class MergeError(msg: String) extends TypeError(msg)
+  class MergeError(msg: String, val tp1: Type, val tp2: Type) extends TypeError(msg)
 
   // ----- Debug ---------------------------------------------------------
 
