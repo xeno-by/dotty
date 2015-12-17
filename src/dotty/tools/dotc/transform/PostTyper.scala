@@ -108,8 +108,6 @@ class PostTyper extends MacroTransform with IdentityDenotTransformer  { thisTran
     tree match {
       case tree: TypeTree =>
         tree
-      case tree: TypedAsync =>
-        tree.trees.head
       case AppliedTypeTree(tycon, args) =>
         val tparams = tycon.tpe.typeSymbol.typeParams
         val bounds = tparams.map(tparam =>

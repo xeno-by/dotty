@@ -369,12 +369,10 @@ class Scala2Unpickler(bytes: Array[Byte], classRoot: ClassDenotation, moduleClas
   }
 
   protected def atReadPos[T](start: Int, op: () => T): T = {
-    this.synchronized {
-      val savedIndex = readIndex
-      readIndex = start
-      try op()
-      finally readIndex = savedIndex
-    }
+    val savedIndex = readIndex
+    readIndex = start
+    try op()
+    finally readIndex = savedIndex
   }
 
   /** Read a name */

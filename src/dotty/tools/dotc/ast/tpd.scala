@@ -19,21 +19,6 @@ import scala.annotation.tailrec
 /** Some creators for typed trees */
 object tpd extends Trees.Instance[Type] with TypedTreeInfo {
 
-  class TypedAsync(val untypedTree: untpd.Tree, val outerTpe: Type, val ctx:Context) extends Thicket(Nil) {
-
-    var typedTree: tpd.Tree = null
-
-    override def trees = {
-      if (typedTree eq null) {
-        typedTree = ctx.typer.typedExpr(untypedTree, outerTpe)(ctx)
-      }
-      ctx.typerState.commit()(ctx)
-      List(typedTree)
-    }
-
-    override def toString: String = s"TypedAsync($untypedTree, $outerTpe)($typedTree)"
-  }
-
   private def ta(implicit ctx: Context) = ctx.typeAssigner
 
   def Modifiers(sym: Symbol)(implicit ctx: Context): Modifiers = Modifiers(

@@ -910,11 +910,8 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
     assignType(cpy.ValDef(vdef)(name, tpt1, rhs1), sym)
   }
 
-
-
   def typedDefDef(ddef: untpd.DefDef, sym: Symbol)(implicit ctx: Context) = track("typedDefDef") {
     val DefDef(name, tparams, vparamss, tpt, _) = ddef
-
     completeAnnotations(ddef, sym)
     val tparams1 = tparams mapconserve (typed(_).asInstanceOf[TypeDef])
     // for secondary constructors we need to use that their type parameters
@@ -927,20 +924,8 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
     val vparamss1 = vparamss nestedMapconserve (typed(_).asInstanceOf[ValDef])
     if (sym is Implicit) checkImplicitParamsNotSingletons(vparamss1)
     val tpt1 = checkSimpleKinded(typedType(tpt))
-
-    val typedAhead = expanded(ddef.rhs).getAttachment(TypedAhead)
-
-    if (typedAhead.isDefined || ddef.rhs.isEmpty) {
-      val rhs1 = typedExpr(ddef.rhs, tpt1.tpe)
-
-      assignType(cpy.DefDef(ddef)(name, tparams1, vparamss1, tpt1, rhs1), sym)
-    } else {
-
-      val asyncTree = new tpd.TypedAsync(ddef.rhs, tpt1.tpe, ctx.fresh.setNewTyperState)
-      ctx.executors.execute(new Runnable{def run = asyncTree.trees})
-
-      assignType(cpy.DefDef(ddef)(name, tparams1, vparamss1, tpt1, asyncTree), sym)
-    }
+    val rhs1 = typedExpr(ddef.rhs, tpt1.tpe)
+    assignType(cpy.DefDef(ddef)(name, tparams1, vparamss1, tpt1, rhs1), sym)
     //todo: make sure dependent method types do not depend on implicits or by-name params
   }
 
