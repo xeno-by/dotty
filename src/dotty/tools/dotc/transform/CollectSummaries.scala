@@ -748,7 +748,7 @@ class BuildCallGraph extends Phase {
       val receiver = callee.call.normalizedPrefix
       registerParentModules(receiver)
 
-      val calleeSymbol = callee.call.termSymbol
+      val calleeSymbol = callee.call.termSymbol.asTerm
       val callerSymbol = caller.call.termSymbol
 
       val tpamsOuter = caller.call.widen match {
@@ -794,7 +794,10 @@ class BuildCallGraph extends Phase {
             refinedConstructedType
           } else if (mode >= AnalyseArgs && (tp.isInstanceOf[PreciseType] || tp.isInstanceOf[ClosureType])) tp
             else tp.widenDealias
-          substitution.apply(refinedClassType)
+          val r = substitution.apply(refinedClassType)
+          // for simplification only
+          if (r =:= tp) tp
+          else r
         } else tp
       }
 
@@ -900,6 +903,8 @@ class BuildCallGraph extends Phase {
       }
 
       receiver match {
+        case _ if calleeSymbol == ctx.definitions.throwMethod =>
+          Nil
         case _ if calleeSymbol == ctx.definitions.Any_asInstanceOf =>
           val from = propagateTargs(receiver)
           val to = propagateTargs(targs.head)
@@ -910,11 +915,27 @@ class BuildCallGraph extends Phase {
           Nil
         case NoPrefix =>  // inner method
           assert(callee.call.termSymbol.owner.is(Method) || callee.call.termSymbol.owner.isLocalDummy)
-          new CallWithContext(callee.call, targs, args, outerTargs, caller, callee) :: Nil
+          new CallWithContext(TermRef.withFixedSym(caller.call.normalizedPrefix, calleeSymbol.name, calleeSymbol), targs, args, outerTargs, caller, callee) :: Nil
 
         case t if calleeSymbol.isPrimaryConstructor =>
 
-          val tpe =  regularizeType(propagateTargs(callee.call.appliedTo(targs).widen.resultType, isConstructor = true))
+          val constructedType = callee.call.appliedTo(targs).widen.resultType
+          val fixNoPrefix = if (constructedType.normalizedPrefix eq NoPrefix) {
+            var currentPrefix = caller.call.normalizedPrefix
+            while (!currentPrefix.classSymbol.exists) {
+              currentPrefix = currentPrefix.normalizedPrefix
+            }
+            constructedType match {
+              case constructedType @ TypeRef(prefix, name)  =>
+                constructedType.underlying match {
+                  case ci: ClassInfo =>
+                    val nci = ci.derivedClassInfo(prefix = currentPrefix) // todo: do this only for inner anonym classes
+                    TypeRef.withFixedSymAndInfo(currentPrefix, name, constructedType.symbol.asType, nci)
+                }
+            }
+          } else constructedType
+
+          val tpe =  regularizeType(propagateTargs(fixNoPrefix, isConstructor = true))
           addReachableType(new TypeWithContext(tpe, parentRefinements(tpe) ++ outerTargs))
 
           new CallWithContext(propagateTargs(receiver).select(calleeSymbol), targs, args, outerTargs, caller, callee) :: Nil
@@ -957,9 +978,20 @@ class BuildCallGraph extends Phase {
               } else Nil
           }
 
-       /* case thisType: ThisType =>
+        case thisType: ThisType =>
+          val dropUntil = thisType.tref.classSymbol
+          var currentThis = caller.call.normalizedPrefix
+          var currentOwner = caller.call.termSymbol.owner
+          while (currentOwner ne dropUntil) {
+            currentThis = currentThis.normalizedPrefix
+            currentOwner = currentOwner.owner.enclosingClass
+          }
           // todo: handle calls on this of outer classes
-          dispatchCalls(caller.call.normalizedPrefix)*/
+
+          val fullThisType = AndType.apply(currentThis, thisType.tref)
+          if (calleeSymbol.is(Private))
+            new CallWithContext(TermRef.withFixedSym(currentThis, calleeSymbol.name, calleeSymbol), targs, args, outerTargs, caller, callee) :: Nil
+          else dispatchCalls(propagateTargs(fullThisType))
         case _: PreciseType =>
           dispatchCalls(propagateTargs(receiver))
         case _: ClosureType =>
@@ -1163,11 +1195,11 @@ class BuildCallGraph extends Phase {
   def run(implicit ctx: Context): Unit = {
     if (runOnce) {
       val specLimit = 15
-      println(s"\n\t\t\tOriginal analisys")
-      val g1 = buildCallGraph(AnalyseOrig, specLimit)
+      //println(s"\n\t\t\tOriginal analisys")
+      //val g1 = buildCallGraph(AnalyseOrig, specLimit)
 
-      println(s"\n\t\t\tType flow analisys")
-      val g2 = buildCallGraph(AnalyseTypes, specLimit)
+      //println(s"\n\t\t\tType flow analisys")
+      //val g2 = buildCallGraph(AnalyseTypes, specLimit)
 
       println(s"\n\t\t\tType & Arg flow analisys")
       val g3 = buildCallGraph(AnalyseArgs, specLimit)
@@ -1177,12 +1209,12 @@ class BuildCallGraph extends Phase {
         try { op(p) } finally { p.close() }
       }
 
-      printToFile(new java.io.File("out1.dot")) { out =>
-        out.println(g1)
-      }
-      printToFile(new java.io.File("out2.dot")) { out =>
-        out.println(g2)
-      }
+      //printToFile(new java.io.File("out1.dot")) { out =>
+      //  out.println(g1)
+      //}
+     // printToFile(new java.io.File("out2.dot")) { out =>
+     //   out.println(g2)
+     // }
       printToFile(new java.io.File("out3.dot")) { out =>
         out.println(g3)
       }
