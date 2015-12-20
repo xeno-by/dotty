@@ -1541,53 +1541,19 @@ object Types {
       ctx.underlyingRecursions -= 1
     }
 
-    /** A selection of the same kind, but with potentially a differet prefix.
-     *  The following normalizations are performed for type selections T#A:
-     *
-     *     T#A --> B                if A is bound to an alias `= B` in T
-     *
-     *  If Config.splitProjections is set:
-     *
-     *     (S & T)#A --> S#A        if T does not have a member named A
-     *               --> T#A        if S does not have a member named A
-     *               --> S#A & T#A  otherwise
-     *     (S | T)#A --> S#A | T#A
-     */
     def derivedSelect(prefix: Type)(implicit ctx: Context): Type =
       if (prefix eq this.prefix) this
-      else if (isType) {
+      else {
         val res = prefix.lookupRefined(name)
         if (res.exists) res
         else if (name == tpnme.hkApply && prefix.classNotLambda) {
           // After substitution we might end up with a type like
           // `C { type hk$0 = T0; ...; type hk$n = Tn } # $Apply`
           // where C is a class. In that case we eta expand `C`.
-          if (defn.isBottomType(prefix)) prefix.classSymbol.typeRef
-          else derivedSelect(prefix.EtaExpandCore)
+          derivedSelect(prefix.EtaExpandCore(this.prefix.typeConstructor.typeParams))
         }
-        else if (Config.splitProjections)
-          prefix match {
-            case prefix: AndType =>
-              def isMissing(tp: Type) = tp match {
-                case tp: TypeRef => !tp.info.exists
-                case _ => false
-              }
-              val derived1 = derivedSelect(prefix.tp1)
-              val derived2 = derivedSelect(prefix.tp2)
-              return (
-                if (isMissing(derived1)) derived2
-                else if (isMissing(derived2)) derived1
-                else prefix.derivedAndType(derived1, derived2))
-            case prefix: OrType =>
-              val derived1 = derivedSelect(prefix.tp1)
-              val derived2 = derivedSelect(prefix.tp2)
-              return prefix.derivedOrType(derived1, derived2)
-            case _ =>
-              newLikeThis(prefix)
-          }
         else newLikeThis(prefix)
       }
-      else newLikeThis(prefix)
 
     /** Create a NamedType of the same kind as this type, but with a new prefix.
      */
@@ -1827,8 +1793,8 @@ object Types {
       else if (sym.defRunId != NoRunId && sym.isCompleted)
         withSig(prefix, name, sym.signature) withSym (sym, sym.signature)
         // Linker note:
-        // this is problematic, as first method will return a hash-consed refference
-        // that could have symbol already set
+        // this is problematic, as withSig method could return a hash-consed refference
+        // that could have symbol already set making withSym trigger a double-binding error
         // ./tests/run/absoverride.scala demonstates this
       else
         all(prefix, name) withSym (sym, Signature.NotAMethod)
@@ -2845,7 +2811,7 @@ object Types {
     }
 
     override def toString =
-      if (lo eq hi) s"TypeAlias($lo, $variance)" else s"TypeBounds($lo, $hi)"
+      if (lo eq hi) s"TypeAlias($lo)" else s"TypeBounds($lo, $hi)"
   }
 
   class RealTypeBounds(lo: Type, hi: Type) extends TypeBounds(lo, hi) {
