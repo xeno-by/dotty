@@ -1668,7 +1668,24 @@ object Types {
   }
 
   final class TermRefWithFixedSym(prefix: Type, name: TermName, val fixedSym: TermSymbol) extends TermRef(prefix, name) with WithFixedSym
-  final class TypeRefWithFixedSym(prefix: Type, name: TypeName, val fixedSym: TypeSymbol) extends TypeRef(prefix, name) with WithFixedSym
+  class TypeRefWithFixedSym(prefix: Type, name: TypeName, val fixedSym: TypeSymbol) extends TypeRef(prefix, name) with WithFixedSym
+
+  /* used by linker */
+  final class TypeRefWithFixedSymAndInfo(prefix: Type, name: TypeName, fixedSym: TypeSymbol, val underl: Type) extends TypeRefWithFixedSym(prefix, name, fixedSym) {
+    override def derivedSelect(prefix: Type)(implicit ctx: Context): Type =
+      if (prefix eq this.prefix) this
+      else {
+        ???
+        val res = prefix.lookupRefined(name)
+        if (res.exists) res
+        else if (name == tpnme.hkApply && prefix.noHK) derivedSelect(prefix.EtaExpandCore)
+        else newLikeThis(prefix)
+    }
+
+    override def info(implicit ctx: Context): Type = underl
+
+    override def equals(that: Any): Boolean = that.isInstanceOf[TypeRefWithFixedSymAndInfo] && super.equals(that) && this.underl == that.asInstanceOf[TypeRefWithFixedSymAndInfo].underl
+  }
 
   /** Assert current phase does not have erasure semantics */
   private def assertUnerased()(implicit ctx: Context) =
@@ -1788,6 +1805,12 @@ object Types {
       if (Config.checkProjections) checkProjection(prefix, name)
       unique(new TypeRefWithFixedSym(prefix, name, sym))
     }
+
+    def withFixedSymAndInfo(prefix: Type, name: TypeName, sym: TypeSymbol, info: Type)(implicit ctx: Context): TypeRef = {
+      if (Config.checkProjections) checkProjection(prefix, name)
+      unique(new TypeRefWithFixedSymAndInfo(prefix, name, sym, info))
+    }
+
 
     /** Create a type ref referring to given symbol with given name.
      *  This is very similar to TypeRef(Type, Symbol),
@@ -2004,7 +2027,7 @@ object Types {
 
   object AndType {
     def apply(tp1: Type, tp2: Type)(implicit ctx: Context) = {
-      assert(tp1.isInstanceOf[ValueType] && tp2.isInstanceOf[ValueType])
+      assert(tp1.isInstanceOf[ValueType] && tp2.isInstanceOf[ValueType], tp1.show +'\n' + tp2.show)
       unchecked(tp1, tp2)
     }
     def unchecked(tp1: Type, tp2: Type)(implicit ctx: Context) = {
@@ -2635,8 +2658,10 @@ object Types {
     def fullyAppliedRef(implicit ctx: Context): Type = fullyAppliedRef(cls.typeRef, cls.typeParams)
 
     def rebase(tp: Type)(implicit ctx: Context): Type =
-      if ((prefix eq cls.owner.thisType) || !cls.owner.isClass || ctx.erasedTypes) tp
-      else tp.substThis(cls.owner.asClass, prefix)
+      if ((prefix eq cls.owner.thisType) || (prefix eq NoPrefix) || ctx.erasedTypes) tp
+      else tp.substThis(cls.owner.enclosingClass.asClass, prefix) // enclosingClass is only needed in Linker.
+                                                                  // for typer originating from typer .owner should always
+                                                                  // be a class
 
     private var typeRefCache: Type = null
 
