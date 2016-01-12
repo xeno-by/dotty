@@ -2546,7 +2546,10 @@ object Types {
      *  uninstantiated
      */
     def instanceOpt(implicit ctx: Context): Type =
-      if (inst.exists) inst else ctx.typerState.instType(this)
+      if (inst.exists) inst else {
+        ctx.typerState.ephemeral = true
+        ctx.typerState.instType(this)
+      }
 
     /** Is the variable already instantiated? */
     def isInstantiated(implicit ctx: Context) = instanceOpt.exists
