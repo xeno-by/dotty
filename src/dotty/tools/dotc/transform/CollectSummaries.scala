@@ -1068,7 +1068,7 @@ class BuildCallGraph extends Phase {
     val reachableSpecs: mutable.Set[(Symbol, List[Type])] = reachableMethods.reachableItems.flatMap { x =>
        val clas = x.call.termSymbol.maybeOwner.info.widen.classSymbol
        val meth = x.call.termSymbol
-      if (mode >= AnalyseTypes) (meth, x.call.termSymbol.maybeOwner.info.baseArgInfos(clas)) :: Nil
+      if (mode >= AnalyseTypes) (meth, x.call.normalizedPrefix.baseArgInfos(clas)) :: Nil
       else {
         val clazSpecializationsCount =
            if (clas.primaryConstructor.info.widenDealias.isInstanceOf[PolyType]) specLimit
@@ -1094,6 +1094,7 @@ class BuildCallGraph extends Phase {
     println(s"\t Reachable classes: ${classesWithReachableMethods.mkString(", ")}")
     println(s"\t Reachable methods: ${reachableDefs.mkString(", ")}")
     println(s"\t Reachable specs: ${reachableSpecs.mkString(", ")}")
+    println(s"\t Primary Constructor specs: ${reachableSpecs.filter(_._1.isPrimaryConstructor).map(x => (x._1.showFullName, x._2))}")
 
     val outGraph = new StringBuffer()
     outGraph.append(s"digraph Gr${mode}_$specLimit {\n")
