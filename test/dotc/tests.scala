@@ -48,7 +48,7 @@ class tests extends CompilerTest {
   val newDir        = testsDir + "new/"
   val miniMethodDir = testsDir + "method_minibox/"
   val miniMoreDir   = testsDir + "more_minibox/"
-  val specialDir    = posDir   + "specialization/"
+  val specializationDir    = posDir   + "specialization/"
 
   val sourceDir = "./src/"
   val dottyDir  = sourceDir + "dotty/"
@@ -102,7 +102,7 @@ class tests extends CompilerTest {
   @Test def pos_anonClassSubtyping = compileFile(posDir, "anonClassSubtyping", twice)
   @Test def pos_extmethods = compileFile(posDir, "extmethods", twice)
   @Test def pos_companions = compileFile(posDir, "companions", twice)
-  @Test def pos_specialization = compileFile(posDir, "specialization")
+  @Test def pos_specialization = compileFiles(specializationDir)
 
   @Test def pos_all = compileFiles(posDir) // twice omitted to make tests run faster
 
@@ -213,11 +213,6 @@ class tests extends CompilerTest {
 
   @Test def dotc_transform = compileDir(dotcDir, "transform")(allowDeepSubtypes)// twice omitted to make tests run faster
 
-  val javaDir = "./tests/pos/java-interop/"
-  @Test def java_all = compileFiles(javaDir)
-
-  @Test def pos_specialization = compileFile(posDir, "specialization")
-
   //@Test def dotc_compilercommand = compileFile(dotcDir + "tools/dotc/config/", "CompilerCommand")
 //@ Test def dotc_transform = compileDir(dotcDir + "tools/dotc/transform", failedbyName)
 
@@ -254,8 +249,6 @@ class tests extends CompilerTest {
 
   val javaDir = "./tests/pos/java-interop/"
   @Test def java_all = compileFiles(javaDir, twice)
-
-  @Test def pos_specialization = compileFile(posDir, "specialization")
 
   //@Test def dotc_compilercommand = compileFile(dotcDir + "config/", "CompilerCommand")
 

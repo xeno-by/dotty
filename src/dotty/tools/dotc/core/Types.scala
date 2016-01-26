@@ -2375,6 +2375,7 @@ object Types {
       resultType.substParams(this, argTypes)
       
     def instantiate(argNum: List[Int], argTypes: List[Type])(implicit ctx: Context) = {
+      import scala.collection.mutable.ListBuffer
       // merge original args list with supplied one
       def mergeArgs(pp: PolyType, nxt: Int, id: Int, until: Int, argT: List[Type], argN: List[Int], res: ListBuffer[Type]): List[Type] =
         if (id < until && argT.nonEmpty) {

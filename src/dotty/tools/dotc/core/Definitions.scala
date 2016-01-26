@@ -429,8 +429,7 @@ class Definitions {
   def StaticAnnotationClass(implicit ctx: Context) = StaticAnnotationType.symbol.asClass
   
   lazy val SpecializedAnnotType = ctx.requiredClassRef("scala.specialized")
-  def SpecializedAnnotClass = specializedAnnotType.symbol.asClass
-  def SpecializedAnnot = specializedAnnotClass
+  def SpecializedAnnotClass = SpecializedAnnotType.symbol.asClass
 
   // Annotation classes
   lazy val AliasAnnotType = ctx.requiredClassRef("dotty.annotation.internal.Alias")

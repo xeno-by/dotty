@@ -52,7 +52,7 @@ class PreSpecializer extends MiniPhaseTransform {
     }
     else {
       val claz = companion.termSymbol.companionClass
-      assert(defn.ScalaValueClasses.contains(claz))
+      assert(defn.ScalaValueClasses().contains(claz))
       claz.typeRef
     }
   }
