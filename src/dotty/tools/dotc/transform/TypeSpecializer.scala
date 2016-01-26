@@ -174,7 +174,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
             }
       )
 
-      val map = newSymbolMap.getOrElse(decl, mutable.HashMap.empty)
+      val map: mutable.HashMap[List[(Int, Type)], Symbols.Symbol] = newSymbolMap.getOrElse(decl, mutable.HashMap.empty)
       map.put(instantiations, newSym)
       newSymbolMap.put(decl, map)
 
