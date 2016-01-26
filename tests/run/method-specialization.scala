@@ -39,12 +39,12 @@ object Test extends dotty.runtime.LegacyApp {
     println(baz_methods.filter(_.toString.contains("baz")).length)
     println(kung_methods.filter(_.toString.contains("kung")).length)
 
-    val baz_int_param = baz_methods.filter(_.toString.contains("$mIc$sp")).head.getParameterTypes.mkString(",")
+    val baz_int_param = genericArrayOps(baz_methods.filter(_.toString.contains("$mIc$sp")).head.getParameterTypes).mkString(",")
     val bar_int_double_params = bar_methods.filter(s => s.toString.contains("$mDIc$sp"))
     val kung_int_gen_params = kung_methods.filter(s => s.toString.contains("$mIc$sp"))
     println(baz_int_param)
-    println(bar_int_double_params.head.getParameterTypes.mkString(","))
-    println(kung_int_gen_params.head.getParameterTypes.mkString(","))
+    println(genericArrayOps(bar_int_double_params.head.getParameterTypes).mkString(","))
+    println(genericArrayOps(kung_int_gen_params.head.getParameterTypes).mkString(","))
 
     def genericKung[A](a: A) = d.kung(a, a)
     genericKung(1)
