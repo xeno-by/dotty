@@ -12,6 +12,7 @@ import dotty.tools.dotc.transform.TreeTransforms.{TransformerInfo, MiniPhaseTran
 import scala.collection.mutable
 import dotty.tools.dotc.core.StdNames.nme
 import dotty.tools._
+import TypeUtils._
 
 import scala.collection.mutable.ListBuffer
 
@@ -170,7 +171,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
             { if (indices.length != poly.paramNames.length) // Partial Specialisation case
               poly.instantiate(indices, instanceTypes) // Returns a PolyType with uninstantiated types kept generic
             else
-              poly.instantiate(instanceTypes) // Returns a MethodType, no polymorphic type remains
+              poly.instantiate(instanceTypes).ensureMethodic // Returns a MethodType, no polymorphic type remains
             }
       )
 

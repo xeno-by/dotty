@@ -87,7 +87,7 @@ class PreSpecializer extends MiniPhaseTransform {
     }
 
     if (allowedToSpecialize(sym)) {
-      val annotation = sym.denot.getAnnotation(defn.SpecializedAnnot).getOrElse(Nil)
+      val annotation = sym.denot.getAnnotation(defn.SpecializedAnnotClass).getOrElse(Nil)
       annotation match {
         case annot: Annotation =>
           val args = annot.arguments
