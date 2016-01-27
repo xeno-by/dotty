@@ -1,5 +1,7 @@
 package dotty.tools.dotc.transform
 
+import java.util
+
 import dotty.tools.dotc.ast.{tpd, TreeTypeMap}
 import dotty.tools.dotc.ast.Trees._
 import dotty.tools.dotc.core.Contexts.Context
@@ -62,16 +64,17 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
    *  A list of symbols gone through the specialisation pipeline
    *  Is used to make calls to transformInfo idempotent
    */
-  private val processed: ListBuffer[Symbol] = ListBuffer.empty
+  private val processed: util.IdentityHashMap[Symbol, Symbol] = new util.IdentityHashMap()
 
-  def allowedToSpecialize(sym: Symbol, numOfTypes: Int)(implicit ctx: Context) =
+
+  def isSpecializable(sym: Symbol, numOfTypes: Int)(implicit ctx: Context): Boolean =
     numOfTypes > 0 &&
       sym.name != nme.asInstanceOf_ &&
       !newSymbolMap.contains(sym) &&
       !(sym is Flags.JavaDefined) &&
       !sym.isPrimaryConstructor
 
-
+  /** Get list of types to specialize for */
   def getSpecTypes(method: Symbol, poly: PolyType)(implicit ctx: Context): List[(Int, List[Type])] = {
 
     val requested = specializationRequests.getOrElse(method, List.empty).toMap
@@ -87,6 +90,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
     }
   }
 
+  /** was decl requested to be specialized */
   def requestedSpecialization(decl: Symbol)(implicit ctx: Context): Boolean =
     ctx.settings.Yspecialize.value != 0 || specializationRequests.contains(decl)
 
@@ -98,6 +102,9 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
     specializationRequests.put(method, (index, arguments) :: prev)
   }
 
+  /* Provided a class that owns a method to be specialized, adds specializations to the body of the class, without forcing new symbols
+  *  provided a method to be specialized, specializes it and enters it into its owner
+  * */
   override def transformInfo(tp: Type, sym: Symbol)(implicit ctx: Context): Type = {
 
     def enterNewSyms(newDecls: List[Symbol], classInfo: ClassInfo) = {
@@ -107,7 +114,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
     }
 
     def specializeMethods(sym: Symbol) = {
-      processed += sym
+      processed.put(sym, sym)
       sym.info match {
         case classInfo: ClassInfo =>
           val newDecls = classInfo.decls
@@ -116,22 +123,22 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
             .filter(requestedSpecialization)
             .flatMap(decl => {
             decl.info.widen match {
-              case poly: PolyType if allowedToSpecialize(decl.symbol, poly.paramNames.length) =>
-                generateMethodSpecializations(getSpecTypes(decl, poly), List.empty)(poly, decl)
+              case poly: PolyType if isSpecializable(decl.symbol, poly.paramNames.length) =>
+                generateMethodSpecializations(getSpecTypes(decl, poly))(poly, decl)()
               case _ => Nil
             }
           })
 
           if (newDecls.nonEmpty) enterNewSyms(newDecls.toList, classInfo)
           else tp
-        case poly: PolyType if allowedToSpecialize(sym, poly.paramNames.length) =>
+        case poly: PolyType if isSpecializable(sym, poly.paramNames.length) =>
           if (sym.owner.info.isInstanceOf[ClassInfo]) {
-            transformInfo(sym.owner.info, sym.owner)
+            transformInfo(sym.owner.info, sym.owner)  //why does it ever need to recurse into owner?
             tp
           }
           else if (requestedSpecialization(sym) &&
-            allowedToSpecialize(sym, poly.paramNames.length)) {
-            generateMethodSpecializations(getSpecTypes(sym, poly), List.empty)(poly, sym)
+            isSpecializable(sym, poly.paramNames.length)) {
+            generateMethodSpecializations(getSpecTypes(sym, poly))(poly, sym)()
             tp
           }
           else tp
@@ -139,17 +146,17 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       }
     }
 
-    def generateMethodSpecializations(specTypes: List[(Int, List[Type])], instantiations: List[(Int, Type)])
-                                     (poly: PolyType, decl: Symbol)
+    def generateMethodSpecializations(specTypes: List[(Int, List[Type])])
+                                     (poly: PolyType, decl: Symbol) (instantiations: List[(Int, Type)] = Nil)
                                      (implicit ctx: Context): List[Symbol] = {
       if (specTypes.nonEmpty) {
         specTypes.head match{
           case (i, tpes) if tpes.nonEmpty =>
             tpes.flatMap(tpe =>
-              generateMethodSpecializations(specTypes.tail, (i, tpe) :: instantiations)(poly, decl)
+              generateMethodSpecializations(specTypes.tail)(poly, decl)((i, tpe) :: instantiations)
             )
           case (i, nil) =>
-            generateMethodSpecializations(specTypes.tail, instantiations)(poly, decl)
+            generateMethodSpecializations(specTypes.tail)(poly, decl)(instantiations)
         }
       }
       else {
@@ -184,12 +191,12 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       newSym
     }
 
-    if (!processed.contains(sym) &&
+    if (!processed.containsKey(sym) &&
       (sym ne defn.ScalaPredefModule.moduleClass) &&
       !(sym is Flags.JavaDefined) &&
       !(sym is Flags.Scala2x) &&
       !(sym is Flags.Package) &&
-      !sym.isAnonymousClass) {
+      !sym.isAnonymousClass/*why? becasue nobody can call from outside? they can still be called from inside the class*/) {
       specializeMethods(sym)
     } else tp
   }
