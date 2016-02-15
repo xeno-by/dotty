@@ -13,6 +13,8 @@ import dotty.tools.dotc.core.Types.{ClassInfo, Type}
 import dotty.tools.dotc.core.{Definitions, Flags}
 import dotty.tools.dotc.transform.TreeTransforms.{TreeTransform, MiniPhaseTransform, TransformerInfo}
 
+import scala.collection.mutable.ListBuffer
+
 /**
  * This phase retrieves all `@specialized` anotations,
  * and stores them for the `TypeSpecializer` phase.
@@ -105,17 +107,27 @@ class PreSpecializer extends MiniPhaseTransform {
   }
 
   override def transformDefDef(tree: tpd.DefDef)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
-    val tparams = tree.tparams.map(_.symbol)
-    val requests = tparams.zipWithIndex.map{case(sym, i) => (i, getSpec(sym))}
-    if (requests.nonEmpty) sendRequests(requests, tree)
+    if (tree.tparams.nonEmpty) {
+      val tparams = tree.tparams.map(_.symbol)
+      def combinations(choices: List[List[Type]], idx: Int, building: Array[Type], result: ListBuffer[Array[Type]]): ListBuffer[Array[Type]] = {
+        if (choices.isEmpty)
+          result += building.clone()
+        else {
+          val head = choices.head
+          head.foreach { tp => building(idx) = tp; combinations(choices.tail, idx + 1, building, result) }
+        }
+        result
+      }
+      val requests: List[Array[Type]] = combinations(tparams.map(getSpec), 0, new Array[Type](tparams.size), ListBuffer.empty).result()
+      if (requests.nonEmpty) sendRequests(requests, tree)
+    }
     tree
   }
 
-  def sendRequests(requests: List[(Int, List[Type])], tree: tpd.Tree)(implicit ctx: Context): Unit = {
-    requests.map {
-      case (index, types) if types.nonEmpty =>
-        ctx.specializePhase.asInstanceOf[TypeSpecializer].registerSpecializationRequest(tree.symbol)(index, types)
-      case _ =>
+  def sendRequests(requests: List[Array[Type]], tree: tpd.Tree)(implicit ctx: Context): Unit = {
+    requests.foreach { types =>
+      println(s"going to specialize ${tree.symbol} for ${types.map(_.show).mkString(" ")}")
+      ctx.specializePhase.asInstanceOf[TypeSpecializer].registerSpecializationRequest(tree.symbol)(types)
     }
   }
 }
