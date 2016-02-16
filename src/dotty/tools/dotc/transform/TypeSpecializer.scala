@@ -78,12 +78,13 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
   def requestedSpecialization(decl: Symbol)(implicit ctx: Context): Boolean =
     ctx.settings.Yspecialize.value != 0 || specializationRequests.contains(decl)
 
-  def registerSpecializationRequest(method: Symbols.Symbol)(arguments: Specialization)
+  def registerSpecializationRequest(methodOrClass: Symbols.Symbol)(arguments: Specialization)
                                    (implicit ctx: Context) = {
+    assert(methodOrClass.isClass || methodOrClass.is(Flags.Method))
     if (ctx.phaseId > this.treeTransformPhase.id)
       assert(ctx.phaseId <= this.treeTransformPhase.id)
-    val prev = specializationRequests.getOrElse(method, List.empty)
-    specializationRequests.put(method, arguments :: prev)
+    val prev = specializationRequests.getOrElse(methodOrClass, List.empty)
+    specializationRequests.put(methodOrClass, arguments :: prev)
   }
 
   /* Provided a class that owns a method to be specialized, adds specializations to the body of the class, without forcing new symbols

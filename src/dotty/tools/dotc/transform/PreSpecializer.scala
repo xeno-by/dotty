@@ -127,7 +127,7 @@ class PreSpecializer extends MiniPhaseTransform {
   def sendRequests(requests: List[Array[Type]], tree: tpd.Tree)(implicit ctx: Context): Unit = {
     requests.foreach { types =>
       println(s"going to specialize ${tree.symbol} for ${types.map(_.show).mkString(" ")}")
-      ctx.specializePhase.asInstanceOf[TypeSpecializer].registerSpecializationRequest(tree.symbol)(types)
+      ctx.specializePhase.asInstanceOf[TypeSpecializer].registerMethodSpecializationRequest(tree.symbol)(types)
     }
   }
 }
