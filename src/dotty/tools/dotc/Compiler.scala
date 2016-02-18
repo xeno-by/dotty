@@ -42,8 +42,8 @@ class Compiler {
       //      List(new Replace),
       List(new Pickler),
       List(new CollectSummaries),
-      List(new BuildCallGraph)
-      /*List(new FirstTransform,
+      List(new BuildCallGraph),
+      List(new FirstTransform,
            new CheckReentrant),
       List(new PreSpecializer,
            new RefChecks,
@@ -60,6 +60,7 @@ class Compiler {
            new CrossCastAnd,
            new Splitter),
       List(new TypeSpecializer),
+      List(new OuterSpecializer),
       List(new VCInlineMethods,
            new SeqLiterals,
            new InterceptedMethods,
@@ -89,7 +90,7 @@ class Compiler {
            new ExpandPrivate,
            new CollectEntryPoints,
            new LabelDefs),
-      List(new GenBCode)*/
+      List(new GenBCode)
     )
 
   var runId = 1

@@ -79,7 +79,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
     ctx.settings.Yspecialize.value != 0 || specializationRequests.contains(decl)
 
   def registerSpecializationRequest(methodOrClass: Symbols.Symbol)(arguments: Specialization)
-                                   (implicit ctx: Context) = {
+                                   (implicit ctx: Context): Unit = {
     assert(methodOrClass.isClass || methodOrClass.is(Flags.Method))
     if (ctx.phaseId > this.treeTransformPhase.id)
       assert(ctx.phaseId <= this.treeTransformPhase.id)
