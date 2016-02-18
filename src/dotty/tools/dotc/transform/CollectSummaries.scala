@@ -1203,6 +1203,29 @@ class BuildCallGraph extends Phase {
     outGraph.toString
   }
 
+  def sendSpecializationRequests(reachableMethods: Set[CallWithContext],
+                                  reachableTypes: Set[TypeWithContext],
+                                  casts: Set[Cast],
+                                  outerMethod: Set[Symbol])(implicit ctx: Context): Unit = {
+    val specPhase = ctx.outerSpecPhase.asInstanceOf[OuterSpecializer]
+    reachableMethods.foreach{mc =>
+      val methodSym = mc.call.termSymbol
+      val outerTargs = methodSym.info.widen match {
+        case PolyType(names) =>
+         (names zip mc.targs).foldLeft(mc.outerTargs)((x, nameType) => x.+(methodSym, nameType._1, nameType._2))
+        case _ =>
+          mc.outerTargs
+      }
+      if (outerTargs.mp.nonEmpty && !methodSym.isPrimaryConstructor)
+        specPhase.registerSpecializationRequest(methodSym)(outerTargs)
+    }
+    reachableTypes.foreach{tpc =>
+      if(tpc.outerTargs.mp.nonEmpty)
+        specPhase.registerSpecializationRequest(tpc.tp.typeSymbol)(tpc.outerTargs)
+    }
+
+  }
+
   var runOnce = true
   def run(implicit ctx: Context): Unit = {
     if (runOnce) {
@@ -1216,6 +1239,7 @@ class BuildCallGraph extends Phase {
       println(s"\n\t\t\tType & Arg flow analisys")
       val (reachableMethods, reachableTypes, casts, outerMethod) = buildCallGraph(AnalyseArgs, specLimit)
       val g3 = outputGraph(AnalyseArgs, specLimit)(reachableMethods, reachableTypes, casts, outerMethod)
+      sendSpecializationRequests(reachableMethods, reachableTypes, casts, outerMethod)
 
       def printToFile(f: java.io.File)(op: java.io.PrintWriter => Unit): Unit = {
         val p = new java.io.PrintWriter(f)
@@ -1302,6 +1326,7 @@ object CollectSummaries {
 
     }
   }
+
   def substName = "substituted".toTypeName
 
   private val forgetHistory = false
