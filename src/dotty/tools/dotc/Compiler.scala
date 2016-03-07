@@ -59,7 +59,7 @@ class Compiler {
            new ExplicitSelf,
            new CrossCastAnd,
            new Splitter),
-      List(new TypeSpecializer),
+      //List(new TypeSpecializer),
       List(new OuterSpecializer),
       List(new VCInlineMethods,
            new SeqLiterals,

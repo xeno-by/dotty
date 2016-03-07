@@ -21,8 +21,11 @@ import java.util.NoSuchElementException
 object TypeApplications {
 
   /** Assert type is not a TypeBounds instance and return it unchanged */
-  val noBounds = (tp: Type) => tp match {
-    case tp: TypeBounds => throw new AssertionError("no TypeBounds allowed")
+  val noBounds: Type => Type = (tp: Type) => tp match {
+    case ta: TypeAlias => noBounds(ta.alias)
+    case tp: TypeBounds =>
+      if (tp.lo eq tp.hi) noBounds(tp.lo)
+      else throw new AssertionError("no TypeBounds allowed")
     case _ => tp
   }
 
