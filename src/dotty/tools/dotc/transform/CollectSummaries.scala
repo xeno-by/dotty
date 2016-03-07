@@ -924,7 +924,7 @@ class BuildCallGraph extends Phase {
 
         case t if calleeSymbol.isPrimaryConstructor =>
 
-          val constructedType = callee.call.appliedTo(targs).widen.resultType
+          val constructedType = callee.call.widen.appliedTo(targs).widen.resultType
           val fixNoPrefix = if (constructedType.normalizedPrefix eq NoPrefix) {
             var currentPrefix = caller.call.normalizedPrefix
             while (!currentPrefix.classSymbol.exists) {
