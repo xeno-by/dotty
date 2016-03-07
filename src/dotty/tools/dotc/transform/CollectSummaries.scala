@@ -740,7 +740,7 @@ class BuildCallGraph extends Phase {
         if (tp1.dealias ne tp1) registerParentModules(tp1.dealias)
         if (tp1.termSymbol.is(Flags.Module)) {
           // reachableTypes += regularizeType(ref(tp1.termSymbol).tpe)
-        } else if (tp1.typeSymbol.is(Flags.Module)) {
+        } else if (tp1.typeSymbol.is(Flags.Module, Flags.Package)) {
           val t = regularizeType(ref(tp1.typeSymbol).tpe)
           addReachableType(new TypeWithContext(t, parentRefinements(t)))
         }
