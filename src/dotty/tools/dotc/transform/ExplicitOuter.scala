@@ -308,7 +308,7 @@ object ExplicitOuter {
     /** The path of outer accessors that references `toCls.this` starting from
      *  the context owner's this node.
      */
-    def path(toCls: Symbol): Tree = try {
+    def path(toCls: Symbol, start: Tree = This(ctx.owner.enclosingClass.asClass)): Tree = try {
       def loop(tree: Tree): Tree = {
         val treeCls = tree.tpe.widen.classSymbol
         val outerAccessorCtx = ctx.withPhaseNoLater(ctx.lambdaLiftPhase) // lambdalift mangles local class names, which means we cannot reliably find outer acessors anymore
@@ -317,7 +317,7 @@ object ExplicitOuter {
         else loop(tree.select(outerAccessor(treeCls.asClass)(outerAccessorCtx)).ensureApplied)
       }
       ctx.log(i"computing outerpath to $toCls from ${ctx.outersIterator.map(_.owner).toList}")
-      loop(This(ctx.owner.enclosingClass.asClass))
+      loop(start)
     } catch {
       case ex: ClassCastException =>
         throw new ClassCastException(i"no path exists from ${ctx.owner.enclosingClass} to $toCls")
