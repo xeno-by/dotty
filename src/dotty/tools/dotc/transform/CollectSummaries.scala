@@ -1130,7 +1130,7 @@ class BuildCallGraph extends Phase {
 
     def csWTToName(x: CallWithContext, close: Boolean = true, open: Boolean = true): String = {
       if (x.call.termSymbol.owner == x.call.normalizedPrefix.classSymbol) {
-        s"${if (open) slash else ""}${escape(x.call.termSymbol.showFullName)}${if (x.targs.nonEmpty) "[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
+        s"${if (open) slash else ""}${escape(x.call.normalizedPrefix.show)}${if (x.targs.nonEmpty) "[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
       } else {
         s"${if (open) slash else ""}${escape(x.call.normalizedPrefix.show)}.super.${escape(x.call.termSymbol.showFullName)}${if (x.targs.nonEmpty) "[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
       }
@@ -1141,7 +1141,7 @@ class BuildCallGraph extends Phase {
     }
 
     def dummyName(x: CallWithContext) = {
-      csWTToName(x, close=false) + "_Dummy\""
+      csWTToName(x, close = false) + "_Dummy\""
     }
 
     def clusterName(x: CallWithContext) = {
