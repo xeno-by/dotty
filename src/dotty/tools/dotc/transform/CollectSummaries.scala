@@ -929,6 +929,12 @@ class BuildCallGraph extends Phase {
             var currentPrefix = caller.call.normalizedPrefix
             while (!currentPrefix.classSymbol.exists) {
               currentPrefix = currentPrefix.normalizedPrefix
+              currentPrefix = currentPrefix match {
+                case t: ThisType =>
+                  t.tref
+
+                case _ => currentPrefix
+              }
             }
             constructedType match {
               case constructedType @ TypeRef(prefix, name)  =>
