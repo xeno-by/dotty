@@ -97,7 +97,7 @@ object desugar {
     val ValDef(name, tpt, rhs) = vdef
     val mods = vdef.mods
     def setterNeeded =
-      (mods is Mutable) && ctx.owner.isClass && (!(mods is PrivateLocal) || (ctx.owner is Trait))
+      (mods is Mutable) && ctx.owner.isClass// && (!(mods is PrivateLocal) || (ctx.owner is Trait))
     if (setterNeeded) {
       // todo: copy of vdef as getter needed?
       // val getter = ValDef(mods, name, tpt, rhs) withPos vdef.pos ?

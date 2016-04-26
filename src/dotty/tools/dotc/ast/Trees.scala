@@ -103,6 +103,8 @@ object Trees {
      */
     val uniqueId = {
       nextId += 1
+      if (nextId == 878)
+        println("ha")
       //assert(nextId != 214, this)
       nextId
     }

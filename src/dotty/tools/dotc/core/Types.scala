@@ -1719,7 +1719,22 @@ object Types {
       if (symbol.exists && !candidate.symbol.exists) { // recompute from previous symbol
         val ownSym = symbol
         val newd = asMemberOf(prefix)
-        candidate.withDenot(asMemberOf(prefix).suchThat(_ eq ownSym))
+        def selectBestFix: SingleDenotation  = {
+          if (newd.hasAltWith(_.signature == ownSym.signature))
+            newd.suchThat(_.signature == ownSym.signature)
+          else {
+            val alts = newd.alternatives
+            val sameParams = alts.filter(_.signature.matchDegree(ownSym.signature) == Signature.ParamMatch)
+            if (sameParams.nonEmpty && sameParams.tail.nonEmpty)
+              ctx.warning(s" Cant resolve overload. Chosing ${sameParams.head} out of options ${sameParams.map(_.signature)}")
+            if (sameParams.nonEmpty)
+              sameParams.head
+            else
+              newd.suchThat(_.signature == ownSym.signature)
+
+          }
+        }
+        candidate.withDenot(selectBestFix)
       }
       else candidate
     }
@@ -3422,7 +3437,8 @@ object Types {
 
   object fieldFilter extends NameFilter {
     def apply(pre: Type, name: Name)(implicit ctx: Context): Boolean =
-      name.isTermName && (pre member name).hasAltWith(!_.symbol.is(Method))
+      name.isTermName && pre.memberExcluding(name, Method).exists
+        //(pre member name).hasAltWith(!_.symbol.is(Method))
   }
 
   object takeAllFilter extends NameFilter {

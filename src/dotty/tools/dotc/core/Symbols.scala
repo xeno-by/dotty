@@ -369,6 +369,8 @@ object Symbols {
     type ThisName <: Name
 
     //assert(id != 4285)
+    if ((id == 30958) || (id == 35979))
+      println("hhh")
 
     /** The last denotation of this symbol */
     private[this] var lastDenot: SymDenotation = _
@@ -583,4 +585,6 @@ object Symbols {
   def currentClass(implicit ctx: Context): ClassSymbol = ctx.owner.enclosingClass.asClass
 
   @sharable var stubs: List[Symbol] = Nil // diagnostic only
+
+  def foo = "I AM DOTTY"
 }

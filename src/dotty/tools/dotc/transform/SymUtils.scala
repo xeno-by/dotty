@@ -87,7 +87,12 @@ class SymUtils(val self: Symbol) extends AnyVal {
 
   def setter(implicit ctx: Context): Symbol =
     if (self.isSetter) self
-    else accessorNamed(self.asTerm.name.setterName)
+    else {
+      val try1 = accessorNamed(self.asTerm.name.setterName)
+      if (try1.exists) try1
+      else
+        self.owner.info.decl(self.asTerm.name.setterName).symbol
+    }
 
   def field(implicit ctx: Context): Symbol =
     self.owner.info.decl(self.asTerm.name.fieldName).suchThat(!_.is(Method)).symbol

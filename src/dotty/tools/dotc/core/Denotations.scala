@@ -806,7 +806,7 @@ object Denotations {
     final def matches(other: SingleDenotation)(implicit ctx: Context): Boolean = {
       val d = signature.matchDegree(other.signature)
       d == Signature.FullMatch ||
-      d >= Signature.ParamMatch && info.matches(other.info)
+      d >= Signature.ParamMatch && info.matches(other.info) && !(other.symbol.is(Flags.Bridge) || this.symbol.is(Flags.Bridge))
     }
     final def filterWithPredicate(p: SingleDenotation => Boolean): SingleDenotation =
       if (p(this)) this else NoDenotation

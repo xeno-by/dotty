@@ -727,7 +727,7 @@ class BuildCallGraph extends Phase {
             // assert(id >= 0) // TODO: IS this code needed at all?
 
             val nlist = x +(parent, t.refinedName, t.refinedInfo)
-            foldOver(nlist, tp)
+            foldOver(nlist, t.parent)
           case _ =>
             foldOver(x, tp)
         }
@@ -819,7 +819,7 @@ class BuildCallGraph extends Phase {
       lazy val targs = callee.targs map {
         case t: TypeVar if mode >= AnalyseTypes && t.stripTypeVar.typeSymbol.maybeOwner == caller.call.termSymbol =>
           assert(caller.call.termSymbol.exists)
-          val abstractSym = callee.targs.head.stripTypeVar.typeSymbol
+          val abstractSym = t.stripTypeVar.typeSymbol
           val id = caller.call.termSymbol.info.asInstanceOf[PolyType].paramNames.indexOf(abstractSym.name)
           propagateTargs(caller.targs(id).stripTypeVar)
         case t if mode >= AnalyseTypes=> propagateTargs(t.stripTypeVar)
@@ -989,7 +989,7 @@ class BuildCallGraph extends Phase {
               } else Nil
           }
 
-        case thisType: ThisType =>
+        case thisType: ThisType if (!(calleeSymbol.owner.flags is PackageCreationFlags)) =>
           val dropUntil = thisType.tref.classSymbol
           var currentThis = caller.call.normalizedPrefix
           var currentOwner = caller.call.termSymbol.owner
@@ -1213,21 +1213,26 @@ class BuildCallGraph extends Phase {
                                   reachableTypes: Set[TypeWithContext],
                                   casts: Set[Cast],
                                   outerMethod: Set[Symbol])(implicit ctx: Context): Unit = {
-    val specPhase = ctx.outerSpecPhase.asInstanceOf[OuterSpecializer]
-    reachableMethods.foreach{mc =>
-      val methodSym = mc.call.termSymbol
-      val outerTargs = methodSym.info.widen match {
-        case PolyType(names) =>
-         (names zip mc.targs).foldLeft(mc.outerTargs)((x, nameType) => x.+(methodSym, nameType._1, nameType._2))
-        case _ =>
-          mc.outerTargs
-      }
-      if (outerTargs.mp.nonEmpty && !methodSym.isPrimaryConstructor)
-        specPhase.registerSpecializationRequest(methodSym)(outerTargs)
-    }
-    reachableTypes.foreach{tpc =>
-      if(tpc.outerTargs.mp.nonEmpty)
-        specPhase.registerSpecializationRequest(tpc.tp.typeSymbol)(tpc.outerTargs)
+   ctx.outerSpecPhase match {
+      case specPhase: OuterSpecializer =>
+
+        reachableMethods.foreach { mc =>
+          val methodSym = mc.call.termSymbol
+          val outerTargs = methodSym.info.widen match {
+            case PolyType(names) =>
+              (names zip mc.targs).foldLeft(mc.outerTargs)((x, nameType) => x.+(methodSym, nameType._1, nameType._2))
+            case _ =>
+              mc.outerTargs
+          }
+          if (outerTargs.mp.nonEmpty && !methodSym.isPrimaryConstructor)
+            specPhase.registerSpecializationRequest(methodSym)(outerTargs)
+        }
+        reachableTypes.foreach { tpc =>
+          if (tpc.outerTargs.mp.nonEmpty)
+            specPhase.registerSpecializationRequest(tpc.tp.typeSymbol)(tpc.outerTargs)
+        }
+      case _ =>
+       ctx.warning("No specializer phase found")
     }
 
   }

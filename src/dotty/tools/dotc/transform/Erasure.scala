@@ -586,8 +586,12 @@ object Erasure extends TypeTestsCasts{
                           .map(_.symbol)
                       )
                     clash match {
-                      case Some(cl) =>
+                      case Some(cl) if (!((cl.flags is Flags.Bridge) || (newSymbol.flags is Flags.Bridge))) =>
                         ctx.error(i"bridge for method ${newSymbol.showLocated(beforeCtx)} of type ${newSymbol.info(beforeCtx)}\n" +
+                          i"clashes with ${cl.symbol.showLocated(beforeCtx)} of type ${cl.symbol.info(beforeCtx)}\n" +
+                          i"both have same type after erasure: ${bridge.symbol.info}")
+                      case Some(cl) =>
+                        ctx.warning(i"bridge for method ${newSymbol.showLocated(beforeCtx)} of type ${newSymbol.info(beforeCtx)}\n" +
                           i"clashes with ${cl.symbol.showLocated(beforeCtx)} of type ${cl.symbol.info(beforeCtx)}\n" +
                           i"both have same type after erasure: ${bridge.symbol.info}")
                       case None => minimalSet += bridge

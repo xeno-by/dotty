@@ -981,7 +981,7 @@ object SymDenotations {
       if (!canMatchInheritedSymbols) Iterator.empty
       else overriddenFromType(owner.asClass.classInfo.selfType)
 
-    private def overriddenFromType(tp: Type)(implicit ctx: Context): Iterator[Symbol] =
+    def overriddenFromType(tp: Type)(implicit ctx: Context): Iterator[Symbol] =
       tp.baseClasses.tail.iterator map overriddenSymbol filter (_.exists)
 
     /** The symbol overriding this symbol in given subclass `ofclazz`.
@@ -1689,7 +1689,7 @@ object SymDenotations {
      *  getters and setters are all returned int his list
      */
     def paramAccessors(implicit ctx: Context): List[Symbol] =
-      unforcedDecls.filter(_ is ParamAccessor).toList
+      unforcedDecls.filter(_ is (ParamAccessor, butNot = Bridge)).toList
 
     /** If this class has the same `decls` scope reference in `phase` and
      *  `phase.next`, install a new denotation with a cloned scope in `phase.next`.

@@ -10,6 +10,7 @@ import Symbols._
 import SymUtils._
 import Constants._
 import TreeTransforms._
+import NameOps._
 import Flags._
 import Decorators._
 
@@ -53,11 +54,18 @@ class Getters extends MiniPhaseTransform with SymTransformer { thisTransform =>
   override def transformSym(d: SymDenotation)(implicit ctx: Context): SymDenotation = {
     def noGetterNeeded =
       d.is(NoGetterNeeded) ||
-      d.initial.asInstanceOf[SymDenotation].is(PrivateLocal) && !d.owner.is(Trait) && !d.is(Flags.Lazy) ||
+      //d.initial.asInstanceOf[SymDenotation].is(PrivateLocal) && !d.owner.is(Trait) && !d.is(Flags.Lazy) ||
       d.is(Module) && d.isStatic ||
       d.isSelfSym
     if (d.isTerm && (d.is(Lazy) || d.owner.isClass) && d.info.isValueType && !noGetterNeeded) {
       val maybeStable = if (d.isStable) Stable else EmptyFlags
+
+//      if (d.is(Mutable) && d.owner.isClass && !d.setter.exists &&d.isCom) {
+//        pri
+//        val setter = ctx.newSymbol(d.owner, d.name.asTermName.setterName, (d.flags | Synthetic | Accessor) &~ CaseAccessor, MethodType(d.name.asTermName :: Nil, d.info.finalResultType :: Nil, defn.UnitType))
+//        setter.entered
+//      }
+
       d.copySymDenotation(
         initFlags = d.flags | maybeStable | AccessorCreationFlags,
         info = ExprType(d.info))

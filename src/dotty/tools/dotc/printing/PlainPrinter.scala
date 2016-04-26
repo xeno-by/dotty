@@ -2,13 +2,27 @@ package dotty.tools.dotc
 package printing
 
 import core._
-import Texts._, Types._, Flags._, Names._, Symbols._, NameOps._, Constants._, Denotations._
-import Contexts.Context, Scopes.Scope, Denotations.Denotation, Annotations.Annotation
+import Texts._
+import Types._
+import Flags._
+import Names._
+import Symbols._
+import NameOps._
+import Constants._
+import Denotations._
+import Contexts.Context
+import Scopes.Scope
+import Denotations.Denotation
+import Annotations.Annotation
 import StdNames.{nme, tpnme}
-import ast.Trees._, ast._
+import ast.Trees._
+import ast._
 import java.lang.Integer.toOctalString
+
 import config.Config.summarizeDepth
+import dotty.tools.dotc.transform.Summaries.ClosureType
 import typer.Mode
+
 import scala.annotation.switch
 
 class PlainPrinter(_ctx: Context) extends Printer {
@@ -236,6 +250,8 @@ class PlainPrinter(_ctx: Context) extends Printer {
       case tp: SkolemType =>
         if (homogenizedView) toText(tp.info)
         else "<unknown instance of type " ~ toTextGlobal(tp.info) ~ ">"
+      case _ =>
+        tp.toString
     }
   }
 
