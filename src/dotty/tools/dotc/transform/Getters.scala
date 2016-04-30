@@ -52,6 +52,8 @@ class Getters extends MiniPhaseTransform with SymTransformer { thisTransform =>
   override def phaseName = "getters"
 
   override def transformSym(d: SymDenotation)(implicit ctx: Context): SymDenotation = {
+    if (d.symbol.id == 31661)
+      println("here")
     def noGetterNeeded =
       d.is(NoGetterNeeded) ||
       //d.initial.asInstanceOf[SymDenotation].is(PrivateLocal) && !d.owner.is(Trait) && !d.is(Flags.Lazy) ||
@@ -75,7 +77,11 @@ class Getters extends MiniPhaseTransform with SymTransformer { thisTransform =>
   private val NoGetterNeeded = Method | Param | JavaDefined | JavaStatic
 
   override def transformValDef(tree: ValDef)(implicit ctx: Context, info: TransformerInfo): Tree =
-    if (tree.symbol is Method) DefDef(tree.symbol.asTerm, tree.rhs) else tree
+    if (tree.symbol is Method) {
+      if (tree.symbol.name.toString == "_")
+        println("here")
+      DefDef(tree.symbol.asTerm, tree.rhs)
+    }else tree
 
   override def transformAssign(tree: Assign)(implicit ctx: Context, info: TransformerInfo): Tree =
     if (tree.lhs.symbol is Method) tree.lhs.becomes(tree.rhs) else tree

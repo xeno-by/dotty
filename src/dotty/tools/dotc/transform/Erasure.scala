@@ -562,6 +562,8 @@ object Erasure extends TypeTestsCasts{
             before match {
               case Nil => emittedBridges.toList
               case (oldMember: untpd.DefDef) :: oldTail =>
+                if (oldMember.name.toString == "fromIter")
+                  println("here")
                 val oldSymbol = oldMember.symbol(beforeCtx)
                 val newSymbol = member.symbol(ctx)
                 assert(oldSymbol.name(beforeCtx) == newSymbol.name,
@@ -580,7 +582,7 @@ object Erasure extends TypeTestsCasts{
                     // check for clashes
                     val clash: Option[Symbol] = oldSymbol.owner.info.decls.lookupAll(bridge.name).find {
                       sym =>
-                        (sym.name eq bridge.name) && sym.info.widen =:= bridge.info.widen
+                        (sym.name eq bridge.name) && sym.signature == bridge.signature
                     }.orElse(
                         emittedBridges.find(stat => (stat.name == bridge.name) && stat.tpe.widen =:= bridge.info.widen)
                           .map(_.symbol)
@@ -591,9 +593,9 @@ object Erasure extends TypeTestsCasts{
                           i"clashes with ${cl.symbol.showLocated(beforeCtx)} of type ${cl.symbol.info(beforeCtx)}\n" +
                           i"both have same type after erasure: ${bridge.symbol.info}")
                       case Some(cl) =>
-                        ctx.warning(i"bridge for method ${newSymbol.showLocated(beforeCtx)} of type ${newSymbol.info(beforeCtx)}\n" +
+                        /*ctx.warning(i"bridge for method ${newSymbol.showLocated(beforeCtx)} of type ${newSymbol.info(beforeCtx)}\n" +
                           i"clashes with ${cl.symbol.showLocated(beforeCtx)} of type ${cl.symbol.info(beforeCtx)}\n" +
-                          i"both have same type after erasure: ${bridge.symbol.info}")
+                          i"both have same type after erasure: ${bridge.symbol.info}") */
                       case None => minimalSet += bridge
                     }
                   }

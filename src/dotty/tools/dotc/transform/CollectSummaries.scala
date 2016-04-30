@@ -523,7 +523,8 @@ object Summaries {
   case class CallInfo(call: Type, // this is type of method, that includes full type of reciever, eg: TermRef(reciever, Method)
                        targs: List[Type],
                        argumentsPassed: List[Type]
-                       )
+                       ) {
+  }
 
   final case class OuterTargs(val mp: Map[Symbol, Map[Name, Type]]) extends AnyVal {
     def ++(parent: (Symbol, List[Type]))(implicit ctx: Context): OuterTargs = {
@@ -545,6 +546,11 @@ object Summaries {
         y._2.foldLeft(x: OuterTargs)((x: OuterTargs, z: (Name, Type)) => x.+(y._1, z._1, z._2))
       }
     }
+    def combine(environment: OuterTargs)(implicit ctx: Context): OuterTargs = {
+      val subst = new SubstituteByParentMap(environment)
+      val newMap = mp.map(x => (x._1, x._2.map(x => (x._1, subst.apply(x._2)))))
+      OuterTargs(newMap)
+    }
   }
 
   object OuterTargs {
@@ -557,7 +563,7 @@ object Summaries {
                         val parent: CallWithContext, val callee: CallInfo) extends CallInfo(call, targs, argumentsPassed) {
 
     val id = { nextCallId += 1; nextCallId}
-    if (id == 9534)
+    if ((id == 11) || (id == 167))
       println("dsds")
     val outEdges = mutable.HashMap[CallInfo, List[CallWithContext]]().withDefault(x => Nil)
 
@@ -662,6 +668,22 @@ class BuildCallGraph extends Phase {
   final val AnalyseTypes = 2
   final val AnalyseArgs = 3
 
+  def parentRefinements(tp: Type)(implicit ctx: Context): OuterTargs =
+    new TypeAccumulator[OuterTargs]() {
+      def apply(x: OuterTargs, tp: Type): OuterTargs = tp match {
+        case t: RefinedType =>
+          val member = t.parent.member(t.refinedName).symbol
+          val parent = member.owner
+          val tparams = parent.info.typeParams
+          val id = tparams.indexOf(member)
+          // assert(id >= 0) // TODO: IS this code needed at all?
+
+          val nlist = x +(parent, t.refinedName, t.refinedInfo)
+          apply(nlist, t.parent)
+        case _ =>
+          foldOver(x, tp)
+      }
+    }.apply(OuterTargs.empty, tp)
 
   /**
     * @param mode see modes above
@@ -715,23 +737,6 @@ class BuildCallGraph extends Phase {
 
     collectedSummaries.values.foreach(x => if(isEntryPoint(x.methodDef)) pushEntryPoint(x.methodDef))
     println(s"\t Found ${reachableMethods.size} entry points")
-
-    def parentRefinements(tp: Type): OuterTargs =
-      new TypeAccumulator[OuterTargs]() {
-        def apply(x: OuterTargs, tp: Type): OuterTargs = tp match {
-          case t: RefinedType =>
-            val member = t.parent.member(t.refinedName).symbol
-            val parent = member.owner
-            val tparams = parent.info.typeParams
-            val id = tparams.indexOf(member)
-            // assert(id >= 0) // TODO: IS this code needed at all?
-
-            val nlist = x +(parent, t.refinedName, t.refinedInfo)
-            foldOver(nlist, t.parent)
-          case _ =>
-            foldOver(x, tp)
-        }
-      }.apply(OuterTargs.empty, tp)
 
     def registerParentModules(tp: Type): Unit = {
       var tp1 = tp
@@ -809,9 +814,9 @@ class BuildCallGraph extends Phase {
       val outerTargs: OuterTargs =
         if (mode < AnalyseTypes) OuterTargs.empty
         else if (calleeSymbol.isProperlyContainedIn(callerSymbol)) {
-          caller.outerTargs ++ tpamsOuter
+          parentRefinements(propagateTargs(receiver)) ++ caller.outerTargs ++ tpamsOuter
         } else {
-          new OuterTargs(caller.outerTargs.mp.filter(x => calleeSymbol.isProperlyContainedIn(x._1)))
+          parentRefinements(propagateTargs(receiver)) ++ new OuterTargs(caller.outerTargs.mp.filter(x => calleeSymbol.isProperlyContainedIn(x._1)))
           // todo: Is AsSeenFrom ever needed for outerTags?
         }
 
@@ -1228,8 +1233,26 @@ class BuildCallGraph extends Phase {
             specPhase.registerSpecializationRequest(methodSym)(outerTargs)
         }
         reachableTypes.foreach { tpc =>
-          if (tpc.outerTargs.mp.nonEmpty)
-            specPhase.registerSpecializationRequest(tpc.tp.typeSymbol)(tpc.outerTargs)
+          val parentOverrides = tpc.tp.typeMembers(ctx).foldLeft(OuterTargs.empty)((outerTargs, denot) =>
+            denot.symbol.allOverriddenSymbols.foldLeft(outerTargs)((outerTargs, sym) =>
+              outerTargs.+(sym.owner, denot.symbol.name, denot.info)))
+
+          val spec = tpc.outerTargs ++ parentOverrides ++ parentRefinements(tpc.tp)
+
+          if (spec.nonEmpty) {
+            specPhase.registerSpecializationRequest(tpc.tp.typeSymbol)(spec)
+            def loop(remaining: List[Symbol]): Unit = {
+              if (remaining.isEmpty) return;
+              val target = remaining.head
+
+              val nspec = OuterTargs(spec.mp.filter{x => target.derivesFrom(x._1)})
+              if (nspec.nonEmpty)
+                specPhase.registerSpecializationRequest(target)(nspec)
+              loop(remaining.tail)
+            }
+            val parents = tpc.tp.baseClasses
+            loop(parents)
+          }
         }
       case _ =>
        ctx.warning("No specializer phase found")

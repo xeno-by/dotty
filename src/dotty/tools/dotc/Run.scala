@@ -2,13 +2,20 @@ package dotty.tools
 package dotc
 
 import core._
-import Contexts._, Periods._, Symbols._, Phases._, Decorators._
+import Contexts._
+import Periods._
+import Symbols._
+import Phases._
+import Decorators._
 import dotty.tools.dotc.transform.TreeTransforms.TreeTransformer
 import io.PlainFile
-import util.{SourceFile, NoSource, Stats, SimpleMap}
+import util.{NoSource, SimpleMap, SourceFile, Stats}
 import reporting.Reporter
 import transform.TreeChecker
 import java.io.{BufferedWriter, OutputStreamWriter}
+
+import dotty.tools.dotc.typer.Mode
+
 import scala.reflect.io.VirtualFile
 import scala.util.control.NonFatal
 
@@ -71,7 +78,7 @@ class Run(comp: Compiler)(implicit ctx: Context) {
     val squashedPhase = ctx.squashed(prevPhase)
 
     ctx.println(s"result of $unit after ${squashedPhase}:")
-    ctx.println(unit.tpdTree.show(ctx))
+    ctx.println(unit.tpdTree.show(ctx.addMode(Mode.FutureDefsOK)))
   }
 
   def compile(sourceCode: String): Unit = {

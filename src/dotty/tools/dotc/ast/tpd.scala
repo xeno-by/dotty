@@ -238,7 +238,8 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     val parents = superRef :: otherParentRefs.map(TypeTree(_))
 
     val selfType =
-      if (cls.classInfo.selfInfo ne NoType) ValDef(ctx.newSelfSym(cls))
+      if (cls.classInfo.selfInfo ne NoType)
+        ValDef(ctx.newSelfSym(cls))
       else EmptyValDef
     def isOwnTypeParam(stat: Tree) =
       (stat.symbol is TypeParam) && stat.symbol.owner == cls

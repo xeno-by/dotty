@@ -97,6 +97,8 @@ import Decorators._
       } else if (sym.isSetter) {
         if (!sym.is(ParamAccessor)) { val Literal(Constant(())) = tree.rhs } // this is intended as an assertion
         val initializer = Assign(ref(field), adaptToField(ref(tree.vparamss.head.head.symbol)))
+        if (sym.name.toString.contains("current"))
+          println("foo")
         cpy.DefDef(tree)(rhs = transformFollowingDeep(initializer)(ctx.withOwner(sym), info))
       }
       else tree // curiously, some accessors from Scala2 have ' ' suffixes. They count as

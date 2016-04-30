@@ -100,11 +100,13 @@ class Mixin extends MiniPhaseTransform with SymTransformer { thisTransform =>
   override def transformSym(sym: SymDenotation)(implicit ctx: Context): SymDenotation =
     if (sym.is(Accessor, butNot = Deferred | Lazy) && sym.owner.is(Trait))
       sym.copySymDenotation(initFlags = sym.flags &~ ParamAccessor | Deferred).ensureNotPrivate
-    else if (sym.isConstructor && sym.owner.is(Trait))
+    else if (sym.isConstructor && sym.owner.is(Trait)) {
+      if (sym.owner.name.toString.contains("spec"))
+        println("ds")
       sym.copySymDenotation(
         name = nme.TRAIT_CONSTRUCTOR,
         info = MethodType(Nil, sym.info.resultType))
-    else
+    } else
       sym
 
   private def initializer(sym: Symbol)(implicit ctx: Context): TermSymbol = {
@@ -230,7 +232,7 @@ class Mixin extends MiniPhaseTransform with SymTransformer { thisTransform =>
     }
 
     def setters(mixin: ClassSymbol): List[Tree] =
-      for (setter <- mixin.info.decls.filter(setr => setr.isSetter && !wasDeferred(setr)).toList)
+      for (setter <- mixin.info.decls.filter(setr => setr.isSetter && !wasDeferred(setr) && !cls.membersNamed(setr.name).filterWithPredicate(_.symbol.signature == setr.signature).exists).toList)
         yield transformFollowing(DefDef(implementation(setter.asTerm), unitLiteral.withPos(cls.pos)))
 
     cpy.Template(impl)(

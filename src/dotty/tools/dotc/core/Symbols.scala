@@ -369,7 +369,7 @@ object Symbols {
     type ThisName <: Name
 
     //assert(id != 4285)
-    if ((id == 30958) || (id == 35979))
+    if ((id == 31411) || (id == 39597))
       println("hhh")
 
     /** The last denotation of this symbol */

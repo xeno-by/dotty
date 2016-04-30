@@ -629,7 +629,7 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
      * for such objects will get a MODULE$ flag and a corresponding static initializer.
      */
     def isStaticModuleClass: Boolean =
-      (sym is Flags.Module) && {
+      (sym is (Flags.Module, butNot = Flags.Trait)) && {
         // scalac uses atPickling here
         // this would not work if modules are created after pickling
         // for example by specialization

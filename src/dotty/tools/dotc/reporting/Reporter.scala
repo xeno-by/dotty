@@ -234,7 +234,7 @@ abstract class Reporter {
   }
 
   def report(d: Diagnostic)(implicit ctx: Context): Unit =
-    if (!isHidden(d) && doReport(d)(ctx.addMode(Mode.Printing)))
+    if (!isHidden(d) && doReport(d)(ctx.addMode(Mode.Printing).addMode(Mode.FutureDefsOK)))
       d match {
         case d: ConditionalWarning if !d.enablingOption.value => unreportedWarnings(d.enablingOption.name) += 1
         case d: Warning => warningCount += 1

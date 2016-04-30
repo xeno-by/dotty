@@ -684,7 +684,7 @@ object Denotations {
     }
 
     private def currentNoDefinedHere(implicit ctx: Context): SingleDenotation =
-      if (ctx.mode is Mode.FutureDefsOK)
+      if ((ctx.mode is Mode.FutureDefsOK) || (ctx.mode is Mode.Printing))
         current(ctx.withPhase(coveredInterval.firstPhaseId))
       else
         throw new NotDefinedHere(demandOutsideDefinedMsg)

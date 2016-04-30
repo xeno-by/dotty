@@ -41,6 +41,7 @@ class Compiler {
       List(new PostTyper),
       //      List(new Replace),
       List(new Pickler),
+      List(new ExpandPrivate),
       List(new CollectSummaries),
       List(new BuildCallGraph),
       List(new FirstTransform,
@@ -61,6 +62,7 @@ class Compiler {
            new Splitter),
       //List(new TypeSpecializer),
       List(new OuterSpecializer),
+      List(new OuterSpecializeParents),
       List(new VCInlineMethods,
            new SeqLiterals,
            new InterceptedMethods,
@@ -87,7 +89,6 @@ class Compiler {
            new Flatten,
            new RestoreScopes),
       List(/*new PrivateToStatic,*/
-           new ExpandPrivate,
            new CollectEntryPoints,
            new LabelDefs),
       List(new GenBCode)

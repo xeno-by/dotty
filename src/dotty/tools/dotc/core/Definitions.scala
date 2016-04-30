@@ -588,7 +588,7 @@ class Definitions {
   /** If type `ref` refers to a class in the scala package, its name, otherwise EmptyTypeName */
   def scalaClassName(ref: Type)(implicit ctx: Context): TypeName = scalaClassName(ref.classSymbol)
 
-  private def isVarArityClass(cls: Symbol, prefix: Name) = {
+  private def isVarArityClass(cls: Symbol, prefix: Name)(implicit ctx: Context) = {
     val name = scalaClassName(cls)
     name.startsWith(prefix) && name.drop(prefix.length).forall(_.isDigit)
   }
@@ -596,10 +596,10 @@ class Definitions {
   def isBottomClass(cls: Symbol) = cls == NothingClass || cls == NullClass
   def isBottomType(tp: Type) = tp.derivesFrom(NothingClass) || tp.derivesFrom(NullClass)
 
-  def isFunctionClass(cls: Symbol) = isVarArityClass(cls, tpnme.Function)
-  def isAbstractFunctionClass(cls: Symbol) = isVarArityClass(cls, tpnme.AbstractFunction)
-  def isTupleClass(cls: Symbol) = isVarArityClass(cls, tpnme.Tuple)
-  def isProductClass(cls: Symbol) = isVarArityClass(cls, tpnme.Product)
+  def isFunctionClass(cls: Symbol)(implicit ctx: Context) = isVarArityClass(cls, tpnme.Function)
+  def isAbstractFunctionClass(cls: Symbol)(implicit ctx: Context) = isVarArityClass(cls, tpnme.AbstractFunction)
+  def isTupleClass(cls: Symbol)(implicit ctx: Context) = isVarArityClass(cls, tpnme.Tuple)
+  def isProductClass(cls: Symbol)(implicit ctx: Context) = isVarArityClass(cls, tpnme.Product)
 
   val RootImportFns = List[() => TermRef](
       () => JavaLangPackageVal.termRef,

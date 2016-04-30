@@ -57,8 +57,11 @@ class ExpandPrivate extends MiniPhaseTransform with IdentityDenotTransformer { t
    *  static members of the companion class, we should tighten the condition below.
    */
   private def ensurePrivateAccessible(d: SymDenotation)(implicit ctx: Context) =
-    if (d.is(PrivateTerm) && d.owner != ctx.owner.enclosingClass)
-      d.ensureNotPrivate.installAfter(thisTransform)
+    if (d.is(PrivateTerm) && d.owner.isClass && !d.isSelfSym) {
+      val nw = d.ensureNotPrivate
+      nw.installAfter(thisTransform)
+      nw.symbol.enteredAfter(thisTransform)
+    }
 
   override def transformIdent(tree: Ident)(implicit ctx: Context, info: TransformerInfo) = {
     ensurePrivateAccessible(tree.symbol)
@@ -66,6 +69,12 @@ class ExpandPrivate extends MiniPhaseTransform with IdentityDenotTransformer { t
   }
 
   override def transformSelect(tree: Select)(implicit ctx: Context, info: TransformerInfo) = {
+    ensurePrivateAccessible(tree.symbol)
+    tree
+  }
+
+
+  override def transformValDef(tree: tpd.ValDef)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
     ensurePrivateAccessible(tree.symbol)
     tree
   }

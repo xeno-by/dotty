@@ -72,6 +72,9 @@ object SymDenotations {
     final val initInfo: Type,
     initPrivateWithin: Symbol = NoSymbol) extends SingleDenotation(symbol) {
 
+    if (symbol.id == 31319 || symbol.id == 31316)
+      println("bla")
+
     //assert(symbol.id != 4940, name)
 
     override def hasUniqueSym: Boolean = exists
@@ -1144,8 +1147,8 @@ object SymDenotations {
     def ensureNotPrivate(implicit ctx: Context) =
       if (is(Private))
         copySymDenotation(
-          name = expandedName,
-          initFlags = this.flags &~ Private | ExpandedName)
+         // name = name//expandedName,
+          initFlags = this.flags &~ Private)
       else this
   }
 
@@ -1392,6 +1395,8 @@ object SymDenotations {
         val parent = ps.head.typeSymbol
         parent.denot match {
           case parentDenot: ClassDenotation =>
+            if (parentDenot eq this)
+              println("fail")
             fp.include(parentDenot.memberFingerPrint)
             if (parentDenot.isFullyCompleted) parentDenot.setFlag(Frozen)
           case _ =>
