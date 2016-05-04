@@ -562,8 +562,8 @@ object Erasure extends TypeTestsCasts{
             before match {
               case Nil => emittedBridges.toList
               case (oldMember: untpd.DefDef) :: oldTail =>
-                if (oldMember.name.toString == "fromIter")
-                  println("here")
+//                if (oldMember.name.toString == "fromIter")
+//                  println("here")
                 val oldSymbol = oldMember.symbol(beforeCtx)
                 val newSymbol = member.symbol(ctx)
                 assert(oldSymbol.name(beforeCtx) == newSymbol.name,

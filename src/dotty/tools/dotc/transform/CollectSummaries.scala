@@ -238,8 +238,8 @@ class CollectSummaries extends MiniPhase { thisTransform =>
     }
 
     override def transformDefDef(tree: tpd.DefDef)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
-      if (tree.name.toString.contains("Iterable"))
-        println("hoo")
+//      if (tree.name.toString.contains("Iterable"))
+//        println("hoo")
       if(!(tree.symbol is Flags.Label)) {
         assert(curMethodSummary.methodDef eq tree.symbol)
         methodSumarries = curMethodSummary :: methodSumarries
@@ -563,8 +563,8 @@ object Summaries {
                         val parent: CallWithContext, val callee: CallInfo) extends CallInfo(call, targs, argumentsPassed) {
 
     val id = { nextCallId += 1; nextCallId}
-    if ((id == 11) || (id == 167))
-      println("dsds")
+//    if ((id == 11) || (id == 167))
+//      println("dsds")
     val outEdges = mutable.HashMap[CallInfo, List[CallWithContext]]().withDefault(x => Nil)
 
     override def hashCode(): Int = super.hashCode() ^ outerTargs.hashCode()
@@ -1157,9 +1157,9 @@ class BuildCallGraph extends Phase {
 
     def clusterName(x: CallWithContext) = {
       val r =  "\"cluster_" + csWTToName(x, open = false)
-      if (r.contains("BufferLike.apply")) {
-        println("doba")
-      }
+//      if (r.contains("BufferLike.apply")) {
+//        println("doba")
+//      }
       r
     }
 

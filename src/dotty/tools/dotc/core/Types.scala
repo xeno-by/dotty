@@ -78,8 +78,8 @@ object Types {
     // debug only: a unique identifier for a type
     val uniqId = {
       nextId = nextId + 1
-      if (nextId == 78452)
-        println("bdd")
+//      if (nextId == 78452)
+//        println("bdd")
 //      if (nextId == 19555)
 //        println("foo")
       nextId
@@ -1727,8 +1727,8 @@ object Types {
           else {
             val alts = newd.alternatives
             val sameParams = alts.filter(_.signature.matchDegree(ownSym.signature) == Signature.ParamMatch)
-            if (sameParams.nonEmpty && sameParams.tail.nonEmpty)
-              ctx.warning(s" Cant resolve overload. Chosing ${sameParams.head}${sameParams.head.signature} out of options ${sameParams.map(_.signature)}")
+//            if (sameParams.nonEmpty && sameParams.tail.nonEmpty)
+//              ctx.warning(s" Cant resolve overload. Chosing ${sameParams.head}${sameParams.head.signature} out of options ${sameParams.map(_.signature)}")
             if (sameParams.nonEmpty)
               sameParams.head
             else

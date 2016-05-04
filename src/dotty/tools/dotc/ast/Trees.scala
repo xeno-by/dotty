@@ -103,8 +103,8 @@ object Trees {
      */
     val uniqueId = {
       nextId += 1
-      if ((nextId == 18058) || (nextId == 18061))
-        println("ha")
+//      if ((nextId == 18058) || (nextId == 18061))
+//        println("ha")
       //assert(nextId != 214, this)
       nextId
     }

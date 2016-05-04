@@ -101,8 +101,8 @@ class Mixin extends MiniPhaseTransform with SymTransformer { thisTransform =>
     if (sym.is(Accessor, butNot = Deferred | Lazy) && sym.owner.is(Trait))
       sym.copySymDenotation(initFlags = sym.flags &~ ParamAccessor | Deferred).ensureNotPrivate
     else if (sym.isConstructor && sym.owner.is(Trait)) {
-      if (sym.owner.name.toString.contains("spec"))
-        println("ds")
+//      if (sym.owner.name.toString.contains("spec"))
+//        println("ds")
       sym.copySymDenotation(
         name = nme.TRAIT_CONSTRUCTOR,
         info = MethodType(Nil, sym.info.resultType))

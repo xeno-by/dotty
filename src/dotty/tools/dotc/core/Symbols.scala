@@ -369,8 +369,8 @@ object Symbols {
     type ThisName <: Name
 
     //assert(id != 4285)
-    if ((id == 31411) || (id == 39597))
-      println("hhh")
+//    if ((id == 31411) || (id == 39597))
+//      println("hhh")
 
     /** The last denotation of this symbol */
     private[this] var lastDenot: SymDenotation = _

@@ -72,8 +72,8 @@ object SymDenotations {
     final val initInfo: Type,
     initPrivateWithin: Symbol = NoSymbol) extends SingleDenotation(symbol) {
 
-    if (symbol.id == 31319 || symbol.id == 31316)
-      println("bla")
+//    if (symbol.id == 31319 || symbol.id == 31316)
+//      println("bla")
 
     //assert(symbol.id != 4940, name)
 
