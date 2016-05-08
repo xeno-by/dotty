@@ -170,7 +170,6 @@ class CollectSummaries extends MiniPhase { thisTransform =>
     override def prepareForUnit(tree: tpd.Tree)(implicit ctx: Context): TreeTransform = {
       if (ctx.compilationUnit.isInstanceOf[TASTYCompilationUnit])
         NoTransform // will retrieve them lazily
-      else if (ctx.settings.lto.value.isEmpty) NoTransform
       else this
     }
 
@@ -1268,7 +1267,7 @@ class BuildCallGraph extends Phase {
 
   var runOnce = true
   def run(implicit ctx: Context): Unit = {
-    if (runOnce) {
+    if (runOnce && ctx.settings.lto.value.nonEmpty) {
       val specLimit = 15
       //println(s"\n\t\t\tOriginal analisys")
       //val g1 = buildCallGraph(AnalyseOrig, specLimit)
