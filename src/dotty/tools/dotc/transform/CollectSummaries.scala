@@ -1024,7 +1024,12 @@ class BuildCallGraph extends Phase {
       for (method <- callSites) {
         // Find new call sites
 
-        val sym = method.call.termSymbol
+        val sym = method.call.normalizedPrefix match {
+          case t: ClosureType =>
+            t.meth.meth.symbol
+          case _ =>
+            method.call.termSymbol
+        }
 
         reachableMethods ++= {
           val summary = collectedSummaries.get(sym)
