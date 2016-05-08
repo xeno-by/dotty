@@ -188,4 +188,7 @@ class ScalaSettings extends Settings.SettingGroup {
   val YpresentationLog = StringSetting("-Ypresentation-log", "file", "Log presentation compiler events into file", "")
   val YpresentationReplay = StringSetting("-Ypresentation-replay", "file", "Replay presentation compiler events from file", "")
   val YpresentationDelay = IntSetting("-Ypresentation-delay", "Wait number of ms after typing before starting typechecking", 0, 0 to 999)
+
+  /** Linker specific settings */
+  val lto        = MultiStringSetting("-lto", "modes", "Enable link time optimizations. Possible options: rewrites, specialize, all")
 }
