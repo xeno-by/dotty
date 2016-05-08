@@ -564,16 +564,19 @@ object Erasure extends TypeTestsCasts{
               case (oldMember: untpd.DefDef) :: oldTail =>
 //                if (oldMember.name.toString == "fromIter")
 //                  println("here")
+                if (ctx.owner.fullName.toString.contains("IterablePolyTransforms"))
+                   println("ddd")
                 val oldSymbol = oldMember.symbol(beforeCtx)
                 val newSymbol = member.symbol(ctx)
                 assert(oldSymbol.name(beforeCtx) == newSymbol.name,
                   s"${oldSymbol.name(beforeCtx)} bridging with ${newSymbol.name}")
-                val newOverridden = oldSymbol.denot.allOverriddenSymbols.toSet // TODO: clarify new <-> old in a comment; symbols are swapped here
+                val newOverridden = oldSymbol.denot.allOverriddenSymbols.toSet      // TODO: clarify new <-> old in a comment; symbols are swapped here
                 val oldOverridden = newSymbol.allOverriddenSymbols(beforeCtx).toSet // TODO: can we find a more efficient impl? newOverridden does not have to be a set!
                 def stillInBaseClass(sym: Symbol) = ctx.owner derivesFrom sym.owner
+                // val neededBridges = (oldOverridden ++ newOverridden).filter{_.signature != member.symbol.signature}
                 val neededBridges = (oldOverridden -- newOverridden).filter(stillInBaseClass)
 
-                var minimalSet = Set[Symbol]()
+                var minimalSet: Set[Symbol] = Set()//neededBridges.groupBy(x => x.symbol.signature).map(x => x._2.head).toSet
                 // compute minimal set of bridges that are needed:
                 for (bridge <- neededBridges) {
                   val isRequired = minimalSet.forall(nxtBridge => !(bridge.info =:= nxtBridge.info))
