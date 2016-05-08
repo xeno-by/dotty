@@ -170,6 +170,7 @@ class CollectSummaries extends MiniPhase { thisTransform =>
     override def prepareForUnit(tree: tpd.Tree)(implicit ctx: Context): TreeTransform = {
       if (ctx.compilationUnit.isInstanceOf[TASTYCompilationUnit])
         NoTransform // will retrieve them lazily
+      else if (ctx.settings.lto.value.isEmpty) NoTransform
       else this
     }
 
