@@ -41,14 +41,19 @@ class MixinOps(cls: ClassSymbol, thisTransform: DenotTransformer)(implicit ctx: 
     ctx.atPhase(thisTransform) { implicit ctx =>
       cls.info.member(sym.name).hasAltWith(_.symbol == sym)
     }
-    
+
   def needsForwarder(meth: Symbol): Boolean = {
-    lazy val overridenSymbols = meth.allOverriddenSymbols
-    def needsDisambiguation = !overridenSymbols.forall(_ is Deferred)
-    def hasNonInterfaceDefinition = overridenSymbols.forall(!_.owner.is(Trait))
+    lazy val competingMethods = cls.baseClasses.iterator
+      .filter(_ ne meth.owner)
+      .map(meth.overriddenSymbol)
+      .filter(_.exists)
+      .toList
+
+    def needsDisambiguation = competingMethods.exists(x=> !(x is Deferred)) // multiple implementations are available
+    def hasNonInterfaceDefinition = competingMethods.exists(!_.owner.is(Trait)) // there is a definition originating from class
     meth.is(Method, butNot = PrivateOrAccessorOrDeferred) &&
-    isCurrent(meth) &&
-    (needsDisambiguation || hasNonInterfaceDefinition || meth.owner.is(Scala2x))
+      isCurrent(meth) &&
+      (needsDisambiguation || hasNonInterfaceDefinition || meth.owner.is(Scala2x))
   }
 
   final val PrivateOrAccessorOrDeferred = Private | Accessor | Deferred
