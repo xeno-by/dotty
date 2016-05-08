@@ -89,6 +89,7 @@ class Compiler {
            new Flatten,
            new RestoreScopes),
       List(/*new PrivateToStatic,*/
+           // new PrintMethodSignatures,
            new CollectEntryPoints,
            new LabelDefs),
       List(new GenBCode)

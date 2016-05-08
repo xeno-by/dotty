@@ -222,6 +222,12 @@ class Definitions {
     lazy val Predef_conformsR = ScalaPredefModule.requiredMethodRef("$conforms")
     def Predef_conforms(implicit ctx: Context) = Predef_conformsR.symbol
 
+    lazy val Predef_printlnR = ScalaPredefModule.info.member(nme.println).suchThat(_.info.firstParamTypes match {
+      case List(pt) => (pt isRef AnyClass) || (pt isRef ObjectClass)
+      case _ => false
+    }).symbol.termRef
+    def Predef_println(implicit ctx: Context) = Predef_printlnR.symbol
+
   lazy val ScalaRuntimeModuleRef = ctx.requiredModuleRef("scala.runtime.ScalaRunTime")
   def ScalaRuntimeModule(implicit ctx: Context) = ScalaRuntimeModuleRef.symbol
   def ScalaRuntimeClass(implicit ctx: Context) = ScalaRuntimeModule.moduleClass.asClass
