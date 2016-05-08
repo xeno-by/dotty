@@ -461,6 +461,7 @@ object StdNames {
     val ofDim: N                = "ofDim"
     val origin: N               = "origin"
     val prefix : N              = "prefix"
+    val println : N             = "println"
     val productArity: N         = "productArity"
     val productElement: N       = "productElement"
     val productIterator: N      = "productIterator"
