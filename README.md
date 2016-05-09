@@ -20,7 +20,7 @@ object rules{
   // Rules can be defined in other compilation units, as they are discovered through TASTY.
   // The following examples are already working in my prototype:
 
-  def twoDropsOnes(x: Seq[Int]) =
+  def isEmpty(x: Seq[Int]) =
     Rewrite(from = x.length == 0,               // linker will look for pattern in `from`, where method arguments are variables to be bound to trees
             to   = x.isEmpty)                   // if the pattern matches, it will rewrite it to `to`, replacing arguments with bound trees
 
