@@ -27,6 +27,14 @@ object rules{
   def twoDropRights(x: List[Int], a: Int, b: Int) =
     Rewrite(from = x.dropRight(a).dropRight(b), // multiple variables can be bound at once
             to   = x.dropRight(a + b))
+  
+  def bigIntShift(bi: BigInt, a: Int)(implicit evi: Literal[a.type]) =
+  Rewrite(from = bi / a,
+     to = 
+      if (Integer.bitCount(a) == 1) // one of those 2 branches will be eliminated either by Linker or by JIT as dead code
+        bi >> java.lang.Integer.numberOfTrailingZeros(a) 
+      else bi / a
+     )
 
   def twoFilters(x: List[Int], a: Int => Boolean, b: Int => Boolean)(implicit apure: IsPure[a.type]) =
                                                 // implicits can be used to specify additional constraints. 
