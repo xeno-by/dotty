@@ -15,6 +15,8 @@ import ast.Trees._
 import dotty.tools.dotc.ast.tpd
 import util.Positions._
 import Names._
+import dotty.tools.dotc.core.Constants.Constant
+import dotty.tools.dotc.transform.TreeTransforms
 import dotty.tools.dotc.transform.TreeTransforms.{MiniPhaseTransform, TransformerInfo, TreeTransform}
 
 import collection.mutable
@@ -31,8 +33,18 @@ class Rewrites extends MiniPhaseTransform { thisTransform =>
   def isOptVersion(n: Name) = n.endsWith(namePattern)
   def dropOpt(n: Name)(implicit ctx: Context) = if (isOptVersion(n)) n.dropRight(namePattern.length) else n
 
-  private var annot: Symbol = null
-  private var pairs: List[(DefDef, DefDef)] = null
+  private var annot             : Symbol = null
+  private var rewriteClass      : Symbol = null
+  private var warningClass      : Symbol = null
+  private var errorClass        : Symbol = null
+  private var rewriteCompanion  : Symbol = null
+  private var rewriteApply      : Symbol = null
+  private var sourceArgument    : Symbol = null
+  private var isPureArgument    : Symbol = null
+  private var isLiteralArgument : Symbol = null
+  private var supportedArguments: Set[Symbol] = null
+  private var pairs             : List[(DefDef, DefDef)] = null
+
 
   def collectPatters(tree: tpd.Tree)(implicit ctx: Context) = {
     val collector = new TreeAccumulator[List[(DefDef, DefDef)]] {
@@ -40,17 +52,20 @@ class Rewrites extends MiniPhaseTransform { thisTransform =>
         tree match {
           case t: tpd.TypeDef if t.isClassDef && t.symbol.hasAnnotation(annot) =>
             val stats = t.rhs.asInstanceOf[Template].body
-            val defsByName = stats.filter(x => x.isInstanceOf[DefDef]).asInstanceOf[List[DefDef]].map(x => (x.symbol.name, x)).toMap
-            val pairs = defsByName.groupBy(x => dropOpt(x._1)).filter(x => x._2.size > 1)
-            val (errors, realPairs) = pairs.partition(x => x._2.size > 2)
-
-            errors.foreach(x => ctx.error("overloads are not supported", x._2.head._2.pos))
-            val prepend = realPairs.map(x=>
-              (x._2.values.find(x => !isOptVersion(x.symbol.name)).get,
-                x._2.values.find(x => isOptVersion(x.symbol.name)).get)
-            ).toList
-
-
+            val prepend = stats.flatMap{x => x match {
+              case defdef: DefDef if defdef.symbol.info.finalResultType.derivesFrom(rewriteClass) || defdef.symbol.info.finalResultType.derivesFrom(warningClass)=>
+                seb(defdef.rhs) match {
+                  case t: Apply if t.symbol eq rewriteApply =>
+                    (cpy.DefDef(defdef)(rhs = t.args.head), cpy.DefDef(defdef)(rhs = t.args.tail.head)) :: Nil
+                  case t: Apply if t.tpe.derivesFrom(warningClass) =>
+                    ctx.error("warning are not implemented yet", t.pos)
+                    Nil
+                  case _ =>
+                    ctx.error("tree not supported", defdef.pos)
+                    Nil
+                }
+              case _ => Nil
+            }}
             foldOver(prepend ::: x, t)
           case _ => foldOver(x, tree)
         }
@@ -61,6 +76,17 @@ class Rewrites extends MiniPhaseTransform { thisTransform =>
 
   override def prepareForUnit(tree: tpd.Tree)(implicit ctx: Context): TreeTransform = {
     annot = ctx.requiredClass("dotty.linker.rewrites")
+    rewriteClass = ctx.requiredClass("dotty.linker.Rewrite")
+    warningClass = ctx.requiredClass("dotty.linker.Warning")
+    errorClass = ctx.requiredClass("dotty.linker.Error")
+
+    isPureArgument = ctx.requiredClass("dotty.linker.IsPure")
+    sourceArgument = ctx.requiredClass("dotty.linker.Source")
+    isLiteralArgument = ctx.requiredClass("dotty.linker.IsLiteral")
+
+    supportedArguments = Set(isLiteralArgument, sourceArgument, isPureArgument)
+    rewriteCompanion = rewriteClass.companionModule
+    rewriteApply = rewriteCompanion.requiredMethod(nme.apply)
     pairs = collectPatters(tree)
     ctx.warning(s"found rewriting rules: ${pairs.map(x=> x._1.symbol.showFullName).mkString(", ")}")
     pairs.foreach(checkSupported)
@@ -71,10 +97,28 @@ class Rewrites extends MiniPhaseTransform { thisTransform =>
     val pattern = pair._1
     val rewrite = pair._2
     def unsupported(reason: String) = ctx.error("Unsupported pattern: " + reason, pattern.pos)
-    if (pattern.symbol.signature != rewrite.symbol.signature)
-      unsupported("signatures do not match")
-    if (pattern.vparamss.flatten.map(_.name) != rewrite.vparamss.flatten.map(_.name))
-      unsupported("arguments should have same names")
+    pattern.symbol.info.resultType match {
+      case t: ImplicitMethodType =>
+        val ptypes = t.paramTypes
+        def checkValidCondition(t: Type) = t match{
+          case t: RefinedType if supportedArguments.contains(t.typeSymbol) =>
+            val info = t.refinedInfo
+            info match {
+              case alias: TypeAlias =>
+                alias.underlying match {
+                  case t: MethodParam =>
+                  case _ =>
+                    ctx.error(i"Unsupported condition $t", pattern.pos)
+                }
+            }
+          case _ =>
+            ctx.error(i"Unsupported condition $t", pattern.pos)
+        }
+        ptypes.foreach(checkValidCondition)
+      case t: MethodType =>
+        ctx.error("multiple argument strings not supported", pattern.pos)
+      case _ =>
+    }
     new TreeTraverser {
       def traverse(tree: tpd.Tree)(implicit ctx: Context): Unit =
         tree match {
@@ -98,6 +142,41 @@ class Rewrites extends MiniPhaseTransform { thisTransform =>
   }
 
 
+  override def prepareForTypeDef(tree: tpd.TypeDef)(implicit ctx: Context): TreeTransform = {
+    if (tree.symbol.hasAnnotation(annot)) TreeTransforms.NoTransform
+    else this
+  }
+
+  type Substitution = Map[Name, (Tree, Symbol /* owner */)]
+
+  private def filtersByPattern(filters: List[ValDef])(implicit ctx: Context): Substitution => Option[Substitution] = {
+    if (filters.isEmpty) {x: Substitution => Some(x)}
+    else {
+      val headFilter = filters.head.symbol.info.typeSymbol
+      val methodParamName = filters.head.symbol.info.asInstanceOf[RefinedType].
+        refinedInfo.asInstanceOf[TypeAlias].underlying.asInstanceOf[TermRef].name
+      if (headFilter eq isLiteralArgument) { x: Substitution =>
+         x.get(methodParamName) match {
+           case Some((t: Literal, _)) =>
+             filtersByPattern(filters.tail)(ctx)(x)
+           case _ =>
+             None
+         }
+      } else if (headFilter eq sourceArgument) { x: Substitution =>
+        val sourceText = Literal(Constant(x(methodParamName)._1.show))
+        val newSubstitution : Substitution = x + (filters.head.name -> (sourceText, NoSymbol))
+        filtersByPattern(filters.tail)(ctx)(newSubstitution)
+      } else if (headFilter eq isPureArgument) {x: Substitution =>
+        if (isPureTree(x(methodParamName)._1)) filtersByPattern(filters.tail)(ctx)(x)
+        else None
+      } else ???
+    }
+  }
+
+  private def isPureTree(t: Tree)(implicit ctx: Context) = {
+    tpd.isPureExpr(t)
+  }
+
   override def transformDefDef(tree: tpd.DefDef)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
     if (tree.symbol.ownersIterator.findSymbol(x => x.hasAnnotation(annot)).exists) tree
     else {
@@ -105,25 +184,35 @@ class Rewrites extends MiniPhaseTransform { thisTransform =>
         override def transform(tree: tpd.Tree)(implicit ctx: Context):tpd.Tree = tree match {
           case tree: DefTree =>
             super.transform(tree)(ctx.withOwner(tree.symbol))
-          case tree =>
+          case _ =>
             val scanner = pairs.iterator.map(x => (x, isSimilar(tree, x._1))).find(x => x._2.nonEmpty)
             if (scanner.nonEmpty) {
               val ((patern, rewrite), Some(binding)) = scanner.get
-              ctx.warning(s"Applying rule ${dropOpt(rewrite.symbol.name)}, substitution: ${binding.map(x => s"${x._1} -> ${x._2._1.show}").mkString(", ")}")
-              val subByName = binding.map(x => (x._1.name, x._2)).toMap[Name, (Tree, Symbol)]
-              val substitution = new TreeMap() {
-                override def transform(tree: tpd.Tree)(implicit ctx: Context): tpd.Tree = tree match {
-                  case tree: DefTree =>
-                    super.transform(tree)(ctx.withOwner(tree.symbol))
-                  case _ =>
-                    if (tree.symbol.maybeOwner == rewrite.symbol && tree.symbol.is(Flags.Param)) {
-                      val (oldTree, oldOwner) = subByName(tree.symbol.name)
-                      oldTree.changeOwner(oldOwner, ctx.owner)
-                    }
-                    else super.transform(tree)
+              val fistSubstitution: Substitution = binding.map(x => (x._1.name, x._2)).toMap
+              val filters =
+                if (patern.symbol.info.resultType.isInstanceOf[ImplicitMethodType])
+                  patern.vparamss.tail.head
+                else Nil
+              val secondSubstitution = filtersByPattern(filters)(ctx)(fistSubstitution)
+
+              if (secondSubstitution.nonEmpty) {
+                val finalSubstitution = secondSubstitution.get
+                ctx.warning(s"Applying rule ${dropOpt(rewrite.symbol.name)}, substitution: ${finalSubstitution.map(x => s"${x._1} -> ${x._2._1.show}").mkString(", ")}")
+                val substitution = new TreeMap() {
+                  override def transform(tree: tpd.Tree)(implicit ctx: Context): tpd.Tree = tree match {
+                    case tree: DefTree =>
+                      super.transform(tree)(ctx.withOwner(tree.symbol))
+                    case _ =>
+                      if (tree.symbol.maybeOwner == rewrite.symbol && tree.symbol.is(Flags.Param)) {
+                        val (oldTree, oldOwner) = finalSubstitution(tree.symbol.name)
+                        if (oldOwner.exists) oldTree.changeOwner(oldOwner, ctx.owner)
+                        else oldTree
+                      }
+                      else super.transform(tree)
+                  }
                 }
-              }
-              super.transform(substitution.transform(rewrite.rhs)).changeOwner(rewrite.symbol, ctx.owner)
+                super.transform(substitution.transform(rewrite.rhs)).changeOwner(rewrite.symbol, ctx.owner)
+              } else super.transform(tree)
             } else super.transform(tree)
         }
       }
@@ -141,18 +230,14 @@ class Rewrites extends MiniPhaseTransform { thisTransform =>
 
 
   private def isSimilar(tree: Tree, pattern: DefDef)(implicit ctx: Context): Option[Map[Symbol, (Tree, Symbol)]] = {
-    var currentMapping = new mutable.HashMap[Symbol, (Tree, Symbol)]()
-    def seb/*skipEmptyBlocks*/(x: Tree) = x match {
-      case Block(Nil, t) => t
-      case _ => x
-    }
-    def abort = currentMapping = null
-    try {
+    val currentMapping = new mutable.HashMap[Symbol, (Tree, Symbol)]()
+    var aborted = false
+    def abort = aborted = true
       def bind(sym: Symbol, tree: Tree, oldOwner: Symbol) = {
         if (currentMapping.contains(sym)) abort
         else currentMapping.put(sym, (tree, oldOwner))
       }
-      def loop(subtree: Tree, subpat: Tree)(implicit ctx: Context): Unit = seb(subtree) match {
+      def loop(subtree: Tree, subpat: Tree)(implicit ctx: Context): Unit = if (!aborted) seb(subtree) match {
         case Apply(sel, args) => seb(subpat) match {
           case Apply(selpat, selargs) if selargs.hasSameLengthAs(args) =>
             loop(sel, selpat)
@@ -189,10 +274,13 @@ class Rewrites extends MiniPhaseTransform { thisTransform =>
         case _ => abort
       }
       loop(tree, pattern.rhs)
-    } catch {
-      case e: NullPointerException =>
-    }
-    if ((currentMapping eq null) || currentMapping.size != pattern.vparamss.flatten.size) None
+
+    if (aborted || currentMapping.size != pattern.vparamss.head.size) None
     else Some(currentMapping.toMap)
+  }
+
+  private def seb/*skipEmptyBlocks*/(x: Tree) = x match {
+    case Block(Nil, t) => t
+    case _ => x
   }
 }
