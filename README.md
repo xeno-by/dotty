@@ -1,7 +1,7 @@
 dotty linker
 =====
 
-[Join the chat at [![Join the chat at https://gitter.im/lampepfl/dotty](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/lampepfl/dotty?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) and call for @Darkdimius if you have questions.
+Join the chat at [![Join the chat at https://gitter.im/lampepfl/dotty](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/lampepfl/dotty?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) and call for @Darkdimius if you have questions.
 
 This is a modified version of Dotty compiler, that includes optimization phases.
 Currently included phases are:
