@@ -7,15 +7,15 @@ import Periods._
 import Symbols._
 import Types._
 import Scopes._
-import typer.{FrontEnd, Typer, Mode, ImportInfo, RefChecks}
-import reporting.{Reporter, ConsoleReporter}
+import typer.{FrontEnd, ImportInfo, Mode, RefChecks, Typer}
+import reporting.{ConsoleReporter, Reporter}
 import Phases.Phase
 import transform._
 import transform.TreeTransforms.{TreeTransform, TreeTransformer}
 import core.DenotTransformers.DenotTransformer
 import core.Denotations.SingleDenotation
-
-import dotty.tools.backend.jvm.{LabelDefs, GenBCode}
+import dotty.tools.backend.jvm.{GenBCode, LabelDefs}
+import dotty.tools.dotc.transform.linker.Rewrites
 
 class Compiler {
 
@@ -70,7 +70,8 @@ class Compiler {
            new ClassTags,
            new ElimByName,
            new AugmentScala2Traits,
-           new ResolveSuper),
+           new ResolveSuper,
+           new Rewrites),
       List(new Erasure),
       List(new ElimErasedValueType,
            new VCElideAllocations,

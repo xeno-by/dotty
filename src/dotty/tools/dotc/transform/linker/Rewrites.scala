@@ -75,6 +75,7 @@ class Rewrites extends MiniPhaseTransform { thisTransform =>
   }
 
   override def prepareForUnit(tree: tpd.Tree)(implicit ctx: Context): TreeTransform = {
+    if (!ctx.settings.rewrites.value) return TreeTransforms.NoTransform
     annot = ctx.requiredClass("dotty.linker.rewrites")
     rewriteClass = ctx.requiredClass("dotty.linker.Rewrite")
     warningClass = ctx.requiredClass("dotty.linker.Warning")

@@ -190,5 +190,6 @@ class ScalaSettings extends Settings.SettingGroup {
   val YpresentationDelay = IntSetting("-Ypresentation-delay", "Wait number of ms after typing before starting typechecking", 0, 0 to 999)
 
   /** Linker specific settings */
-  val lto        = MultiStringSetting("-lto", "modes", "Enable link time optimizations. Possible options: rewrites, specialize, all")
+  val lto             = MultiStringSetting("-lto", "modes", "Enable link time optimizations. Possible options: rewrites, specialize, all.")
+  val rewrites        = BooleanSetting("-rewrites", "Enable library-defined rewrite rules")
 }
