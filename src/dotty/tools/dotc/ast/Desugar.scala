@@ -581,6 +581,7 @@ object desugar {
     case tree: DefDef => defDef(tree)
     case tree: ModuleDef => moduleDef(tree)
     case tree: PatDef => patDef(tree)
+    case tree: Thicket => cpy.Thicket(tree)(tree.trees.map(defTree))
   }
 
   /**     { stats; <empty > }

@@ -350,7 +350,47 @@ class Namer { typer: Typer =>
   /** Expand tree and store in `expandedTree` */
   def expand(tree: Tree)(implicit ctx: Context): Unit = tree match {
     case mdef: DefTree =>
-      val expanded = desugar.defTree(mdef)
+      def maybeExpandAnnotations(mdef: MemberDef): Tree = {
+        val anns = mdef.mods.annotations
+        val expanders = anns.flatMap {
+          case ann @ Apply(Select(New(tpt), init), Nil) =>
+            val classpath = ctx.platform.classPath.asURLs.toArray
+            val classloader = new java.net.URLClassLoader(classpath, getClass.getClassLoader)
+            try {
+              val moduleClass = classloader.loadClass(tpt.show + "$inline$")
+              val module = moduleClass.getField("MODULE$").get(null)
+              val impl = moduleClass.getDeclaredMethods().find(_.getName == "apply").get
+              impl.setAccessible(true)
+
+              import scala.{meta => m}
+              import parsing.Parsers.Parser
+              import util.SourceFile
+              import dotty.eden._
+              val metaPrefix = null
+              val metaExpandee: m.Tree = {
+                val mods1 = mdef.mods.withAnnotations(mdef.mods.annotations.filter(_ ne ann))
+                mdef.withMods(mods1)
+              }
+              val metaArgs = List(metaPrefix, metaExpandee)
+              val metaResult = impl.invoke(module, metaArgs.asInstanceOf[List[AnyRef]].toArray: _*).asInstanceOf[m.Tree]
+              val result = {
+                val (_, stats) = new Parser(new SourceFile("<meta>", metaResult.syntax.toArray)).templateStatSeq()
+                stats match { case List(stat) => stat; case stats => Thicket(stats) }
+              }
+              Some(result)
+            } catch {
+              case _: ClassNotFoundException =>
+                None
+            }
+          case _ =>
+            None
+        }
+        expanders.headOption.getOrElse(mdef)
+      }
+      val expanded = mdef match {
+        case mdef: MemberDef => desugar.defTree(maybeExpandAnnotations(mdef))
+        case mdef => desugar.defTree(mdef)
+      }
       typr.println(i"Expansion: $mdef expands to $expanded")
       if (expanded ne mdef) mdef.pushAttachment(ExpandedTree, expanded)
     case _ =>

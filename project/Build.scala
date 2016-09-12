@@ -34,10 +34,10 @@ object DottyBuild extends Build {
         else
           baseVersion + "-SNAPSHOT"
       },
-      organization in Global := "ch.epfl.lamp",
-      organizationName in Global := "LAMP/EPFL",
-      organizationHomepage in Global := Some(url("http://lamp.epfl.ch")),
-      homepage in Global := Some(url("https://github.com/lampepfl/dotty")),
+      organization in Global := "me.fengy",
+      organizationName in Global := "Liu Fengyun",
+      organizationHomepage in Global := Some(url("http://fengy.me")),
+      homepage in Global := Some(url("https://github.com/liufengyun/dotty")),
 
       // scalac options
       scalacOptions in Global ++= Seq("-feature", "-deprecation", "-encoding", "UTF8", "-language:existentials,higherKinds,implicitConversions"),
@@ -104,6 +104,8 @@ object DottyBuild extends Build {
                                   "com.novocode" % "junit-interface" % "0.11" % "test",
                                   "com.github.spullara.mustache.java" % "compiler" % "0.9.3",
                                   "com.typesafe.sbt" % "sbt-interface" % sbtVersion.value),
+      libraryDependencies ++= Seq("org.scalameta" %% "scalameta" % "1.2.0",
+                                  "me.fengy" %% "eden" % "0.1"),
       // enable improved incremental compilation algorithm
       incOptions := incOptions.value.withNameHashing(true),
 
